@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {validateImage,uploadImage,withImageUrls} from '../src/product-images.js';
+assert.equal(validateImage(null),false);
+assert.equal(validateImage({name:'',size:0}),false);
+for(const file of [{name:'x.svg',type:'image/svg+xml',size:10},{name:'x.png',type:'image/png',size:5242881},{name:'empty.png',type:'image/png',size:0}]) assert.throws(()=>validateImage(file));
+assert.equal(validateImage({name:'x.png',type:'image/png',size:5242880}),true);
+await assert.rejects(()=>uploadImage({storage:{from:()=>({upload:async()=>({error:{}})})}},{name:'x.png',type:'image/png',size:10},'org'),/imageUploadError/);
+const rows=await withImageUrls({storage:{from:()=>({createSignedUrl:async()=>{throw Error('offline');}})}},[{id:1,photo_path:'org/a.png'},{id:2}]);
+assert.equal(rows.length,2);assert.equal(rows[0].imageUrl,null);
+console.log('PASS: image type/size validation, failed upload, unavailable image preserves catalogue.');
