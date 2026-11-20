@@ -51,6 +51,8 @@ La fonction `admin-organizations` vérifie également le JWT et l’appartenance
 
 La fonction est préparée mais doit être déployée après vérification de la migration catalogue, puis de la migration `supabase/06-buyer-wholesaler-role.sql` avant la mise en service du nouveau rôle combiné. Exécuter le contrôle en lecture seule `supabase/03-preflight.sql` et sauvegarder les tables concernées. La migration et le code doivent être mis en service ensemble :
 
+Les deux fonctions Edge utilisent `verify_jwt = false` au niveau de la passerelle ; chaque fonction valide elle-même le jeton avec `auth.getUser` et exige une appartenance admin active via `requireActiveAdmin`. Cette vérification applicative est obligatoire et ne doit pas être retirée.
+
 ```sh
 supabase functions deploy admin-create-user --project-ref otaodwohbksacvbheshd
 supabase functions deploy admin-organizations --project-ref otaodwohbksacvbheshd

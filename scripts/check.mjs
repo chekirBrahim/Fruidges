@@ -50,4 +50,13 @@ assert.match(directoryFunction, /fruidges_set_organization_country/);
 assert.match(directoryFunction, /SUPABASE_SERVICE_ROLE_KEY/);
 assert.doesNotMatch(directoryFunction, /auth\.admin|user_id,email/);
 assert.doesNotMatch(await read("src/auth-live.js"), /\.from\(['"]fruidges_(organizations|memberships)['"]\)/);
-assert.match(await read("supabase/config.toml"), /\[functions\.admin-organizations\][\s\S]*?verify_jwt = true/);
+const edgeConfig = await read("supabase/config.toml");
+const adminAccess = await read("supabase/functions/_shared/admin-access.js");
+for (const [name, source] of [
+  ["admin-create-user", accountFunction],
+  ["admin-organizations", directoryFunction]
+]) {
+  assert.match(edgeConfig, new RegExp(`\\[functions\\.${name}\\][\\s\\S]*?verify_jwt = false`));
+  assert.match(source, /requireActiveAdmin/);
+}
+assert.match(adminAccess, /client\.auth\.getUser/);

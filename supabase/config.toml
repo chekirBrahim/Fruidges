@@ -1,7 +1,7 @@
 [functions.admin-create-user]
 entrypoint = "./functions/admin-create-user/index.js"
-verify_jwt = true
+verify_jwt = false
 
 [functions.admin-organizations]
 entrypoint = "./functions/admin-organizations/index.js"
-verify_jwt = true
+verify_jwt = false
