@@ -28,6 +28,7 @@ for (const name of ["admin", "supplier", "restaurant", "requests"]) assert.doesN
 await import("./test-auth.mjs");
 
 await import("./test-session.mjs");
+await import("./test-market-access.mjs");
 await import("./test-catalog.mjs");
 await import("./test-excel-import.mjs");
 await import("./test-admin-users.mjs");

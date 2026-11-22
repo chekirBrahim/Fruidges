@@ -15,7 +15,7 @@ const client = {
   }
 };
 
-assert.deepEqual(assignableRoles, ['supplier', 'buyer', 'restaurant', 'admin']);
+assert.deepEqual(assignableRoles, ['supplier', 'importer', 'distributor', 'horeca', 'admin']);
 assert.equal(await createUserWithSetupLink(client, ' Person@Example.com ', 'supplier', {organizationName:'Company'}), setupLink);
 assert.equal(calls, 1);
 await assert.rejects(() => createUserWithSetupLink(client, 'not-an-email', 'supplier'),
@@ -28,10 +28,10 @@ assert.equal(calls, 1);
 
 assert.deepEqual(parseCreateUserRequest({
   email: ' Person@Example.com ',
-  role: 'buyer',
+  role: 'importer',
   organizationName: 'Company',
   user_metadata: { role: 'admin' }
-}), { email: 'person@example.com', role: 'buyer', organizationName:'Company', organizationId:null });
+}), { email: 'person@example.com', role: 'importer', organizationName:'Company', organizationId:null });
 assert.throws(() => parseCreateUserRequest({ email: 'person@example.com', role: 'owner' }));
 assert.throws(() => parseCreateUserRequest({ email: 'person@example.com', role: 'wholesaler', organizationName:'Company' }));
 assert.deepEqual(parseCreateUserRequest({

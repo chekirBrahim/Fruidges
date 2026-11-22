@@ -1,5 +1,5 @@
 export const assignableRoles = Object.freeze([
-  'supplier', 'buyer', 'restaurant', 'admin'
+  'supplier', 'importer', 'distributor', 'horeca', 'admin'
 ]);
 
 export class AdminUserError extends Error {

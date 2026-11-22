@@ -1,4 +1,4 @@
-export const roles = Object.freeze(['supplier', 'buyer', 'restaurant', 'admin']);
+export const roles = Object.freeze(['supplier', 'importer', 'distributor', 'horeca', 'admin']);
 export class AccessError extends Error {
   constructor(code) { super(code); this.code = code; }
 }
@@ -13,7 +13,7 @@ export async function resolveMembership(client) {
   if (result.error) throw new AccessError('configuration');
   if (!Array.isArray(result.data) || result.data.length !== 1) throw new AccessError('pending');
   const membership = result.data[0];
-  const role = membership.role === 'wholesaler' ? 'buyer' : membership.role;
+  const role = membership.role;
   if (membership.user_id !== data.user.id || !membership.organization_id ||
       membership.status !== 'active' || !roles.includes(role)) {
     throw new AccessError('denied');

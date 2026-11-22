@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { resolveMembership, signIn, roles } from '../src/session.js';
 let cases = 0;
-function fake({ role='buyer', status='active', rows, dbError=null, authError=null, loginError=null, userId='user-a' } = {}) {
+function fake({ role='importer', status='active', rows, dbError=null, authError=null, loginError=null, userId='user-a' } = {}) {
   const calls = [];
   const client = {
     auth: {
@@ -22,7 +22,7 @@ for (const role of roles) {
   assert.equal((await resolveMembership(client)).membership.role,role); cases++;
 }
 const legacyWholesale=fake({role:'wholesaler'});
-assert.equal((await resolveMembership(legacyWholesale.client)).membership.role,'buyer');cases++;
+await assert.rejects(()=>resolveMembership(legacyWholesale.client),error=>error.code==='denied');cases++;
 for (const [options,code] of [
   [{rows:[]},'pending'], [{rows:[{},{}]},'pending'], [{status:'suspended'},'denied'],
   [{role:'superadmin'},'denied'], [{userId:'user-b'},'denied'],

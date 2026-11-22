@@ -4,6 +4,7 @@ main.wide,main.wide+footer{max-width:1120px}.workspace-card{margin-bottom:20px}.
 .admin-users-card{margin-bottom:20px}.admin-users-card h2{margin-top:0}.admin-users-form{display:grid;grid-template-columns:minmax(0,1fr);gap:0;max-width:640px}.admin-users-form label{margin:14px 0 8px}.admin-users-form input,.admin-users-form select{width:100%;min-width:0;font:inherit;border:1px solid #a9beb0;border-radius:10px;padding:12px;background:#fff;color:inherit}.admin-users-form input{direction:ltr}.admin-users-form p{margin:12px 0 0;color:#9a2b21}.admin-users-form button{margin-top:12px}
 
 .product-image { width:100%; height:200px; object-fit:contain; border-radius:12px; background:#f5f8f5; }
+.catalog-form .product-audience,.excel-import .product-audience{grid-column:1/-1;margin:14px 0 0;padding:16px;border:1px solid #dde8df;border-radius:12px}.product-audience legend{padding-inline:6px;font-weight:700}.product-audience p{margin:0 0 8px}.product-audience-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));gap:4px 12px}.catalog-form .product-audience label,.excel-import .product-audience label{display:flex;align-items:center;gap:8px;margin:6px 0}.catalog-form .product-audience input[type="checkbox"],.excel-import .product-audience input[type="checkbox"]{display:inline-block;width:auto;margin:0;padding:0}
 
 .admin-layout{display:grid;grid-template-columns:220px minmax(0,1fr);gap:20px;align-items:start}
 .admin-nav{display:grid;gap:6px;align-content:start;padding:12px;background:#fff;border:1px solid #dde8df;border-radius:16px}
@@ -136,6 +137,21 @@ main.wide.buyer-page{max-width:none;width:100%;margin:0;padding:0}
 .buyer-totals strong{display:block}
 .buyer-cart-warning{color:#8a3b13;font-weight:700}
 .buyer-prepare-order{margin-block:8px}
+.buyer-prepare-order[data-buyer-submit-order]{display:block;width:100%;min-height:48px;font-size:16px}
+.order-list-section{margin-block:14px}
+.order-card{margin-block:12px;padding:16px;border:1px solid #dce8df;border-radius:14px;background:#fff}
+.order-card>header{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.order-card>header h3{margin:0;overflow-wrap:anywhere}
+.order-status{color:#725400;font-weight:800;text-align:end}
+.order-card dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px;margin-block:14px}
+.order-card dl div{min-width:0}
+.order-card dt{color:#64766a;font-size:12px}
+.order-card dd{margin:3px 0 0;overflow-wrap:anywhere}
+.order-card h4{margin-block:16px 6px}
+.order-lines{margin:0;padding-inline-start:0;list-style:none}
+.order-line{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding-block:10px;border-block-start:1px solid #e3ebe4}
+.order-line p{margin:4px 0;color:#64766a;font-size:12px;overflow-wrap:anywhere}
+.order-actions{display:flex;flex-wrap:wrap;gap:8px;margin-block-start:14px}
 .buyer-order-actions{margin-top:18px;padding:16px;border:1px solid #dce8df;border-radius:13px;background:#f8fbf8}
 .buyer-order-status{font-weight:800;color:#725400}
 .buyer-order-action-buttons{display:flex;gap:8px;flex-wrap:wrap}
@@ -143,4 +159,4 @@ main.wide.buyer-page{max-width:none;width:100%;margin:0;padding:0}
 .buyer-order-actions>.notice{margin:12px 0 0}
 .buyer-resale-form{margin-top:22px}
 @media(max-width:900px){.buyer-layout{grid-template-columns:1fr}.buyer-nav{position:sticky;top:0;z-index:15;display:flex;flex-direction:row;overflow-x:auto;padding:9px;gap:5px}.buyer-nav h2{display:none}.buyer-nav button{width:auto;flex:none;white-space:nowrap}.buyer-main{padding:16px}.buyer-offer{grid-template-columns:90px minmax(0,1fr)}.buyer-offer>img,.buyer-photo-empty{width:90px;height:90px}.buyer-offer-actions{grid-column:2;display:flex;justify-content:flex-end;align-items:center;flex-wrap:wrap}}
-@media(max-width:600px){.buyer-toptools{align-items:flex-start}.buyer-toptools>div{gap:4px}.buyer-toptools button{padding:7px 8px;font-size:11px}.buyer-main{padding:12px}.buyer-hero{min-height:130px;padding:20px}.buyer-hero>strong{display:none}.buyer-geo-panel,.buyer-catalog-panel,.buyer-panel{padding:15px}.buyer-geo-modes{width:100%}.buyer-geo-modes button{flex:1;padding:8px 5px;font-size:11px}.buyer-map{height:280px}.buyer-map-marker span{font-size:13px}.buyer-country-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.buyer-country-card{gap:6px;padding:8px}.buyer-country-flag{font-size:23px}.buyer-offer{grid-template-columns:78px minmax(0,1fr);gap:10px;padding:11px}.buyer-offer>img,.buyer-photo-empty{width:78px;height:82px}.buyer-offer-heading h3{font-size:15px}.buyer-offer-details>p{font-size:11px}.buyer-offer-actions{grid-column:1/-1;flex-direction:row;justify-content:flex-end}.buyer-cart-row{grid-template-columns:50px minmax(0,1fr);gap:8px}.buyer-cart-row>img{width:50px;height:48px}.buyer-cart-row>.buyer-stepper,.buyer-cart-row>strong,.buyer-cart-row>button{grid-column:2}.buyer-section-heading h2{font-size:19px}}
+@media(max-width:600px){.buyer-toptools{align-items:flex-start}.buyer-toptools>div{gap:4px}.buyer-toptools button{padding:7px 8px;font-size:11px}.buyer-main{padding:12px}.buyer-hero{min-height:130px;padding:20px}.buyer-hero>strong{display:none}.buyer-geo-panel,.buyer-catalog-panel,.buyer-panel{padding:15px}.buyer-geo-modes{width:100%}.buyer-geo-modes button{flex:1;padding:8px 5px;font-size:11px}.buyer-map{height:280px}.buyer-map-marker span{font-size:13px}.buyer-country-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.buyer-country-card{gap:6px;padding:8px}.buyer-country-flag{font-size:23px}.buyer-offer{grid-template-columns:78px minmax(0,1fr);gap:10px;padding:11px}.buyer-offer>img,.buyer-photo-empty{width:78px;height:82px}.buyer-offer-heading h3{font-size:15px}.buyer-offer-details>p{font-size:11px}.buyer-offer-actions{grid-column:1/-1;flex-direction:row;justify-content:flex-end}.buyer-cart-row{grid-template-columns:50px minmax(0,1fr);gap:8px}.buyer-cart-row>img{width:50px;height:48px}.buyer-cart-row>.buyer-stepper,.buyer-cart-row>strong,.buyer-cart-row>button{grid-column:2}.order-card dl{grid-template-columns:1fr}.order-line{grid-template-columns:1fr}.buyer-section-heading h2{font-size:19px}}

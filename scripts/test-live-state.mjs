@@ -14,14 +14,18 @@ const directoryRoleCounts = (role,assignedRole) => {
 };
 const directoryOrganization = (id,name,role) => ({
   id,name,country_code:null,created_at:'2026-01-01',member_count:1,
-  membership_counts:Object.fromEntries(['supplier','buyer','restaurant','admin']
+  membership_counts:Object.fromEntries(['supplier','importer','distributor','horeca','admin']
     .map(memberRole=>[memberRole,directoryRoleCounts(memberRole,role)]))
 });
 let directoryOrganizations = [
   directoryOrganization('org-supplier','Supplier Co','supplier'),
-  directoryOrganization('org-buyer','Buyer Co','buyer')
+  directoryOrganization('org-buyer','Buyer Co','importer')
 ];
 const directoryCalls=[];
+let orderRows=[];
+let orderItemRows=[];
+let nextOrderRpc={data:null,error:null};
+const orderRpcCalls=[];
 const nodes = new Map();
 let mountedOriginMap;
 const node = id => {
@@ -32,6 +36,9 @@ const node = id => {
 let onAuth;
 let nextProductUpdate={data:{id:'draft-a',status:'published'},error:null};
 const productUpdates=[];
+let nextProductInsert={data:{id:'admin-created-product',organization_id:'org-supplier',sales_channel:'source',
+  status:'published',audience_roles:['importer','horeca'],audience_override:true},error:null};
+const productInserts=[];
 const client = {
   auth:{onAuthStateChange(fn){onAuth=fn;},signOut:async()=>({error:null})},
   functions:{async invoke(name,options){
@@ -40,28 +47,41 @@ const client = {
     if(options.body.action==='list') return {data:{organizations:directoryOrganizations},error:null};
     return {data:{ok:true,organizationId:options.body.organizationId,countryCode:options.body.countryCode},error:null};
   }},
+  async rpc(name,args){
+    orderRpcCalls.push({name,args});
+    return nextOrderRpc;
+  },
   from(table){
+    if(table==='fruidges_orders') return {select(){return this;},order:async()=>({data:orderRows,error:null})};
+    if(table==='fruidges_order_items') {
+      let ids=[];
+      return {select(){return this;},in(_column,values){ids=values;return this;},
+        order:async()=>({data:orderItemRows.filter(item=>ids.includes(item.order_id)),error:null})};
+    }
     if(table==='fruidges_products') {
       let update;
       return {
         update(values){update={values,filters:[]};productUpdates.push(update);return this;},
+        insert(values){productInserts.push(values);return this;},
         eq(column,value){update.filters.push([column,value]);return this;},
         select(){return this;},
-        async single(){return nextProductUpdate;}
+        async single(){return update ? nextProductUpdate : {data:{...productInserts.at(-1),id:nextProductInsert.data.id},error:nextProductInsert.error};}
       };
     }
     return {select(){return this;},order:async()=>({data:[],error:null})};
   }
 };
 const context = vm.createContext({
-  createClient:()=>client,resolveMembership:async()=>account,
+  marketRoleLabels:{en:{supplier:'Supplier',importer:'Importer',distributor:'Distributor',horeca:'HORECA',admin:'Administrator'},ar:{supplier:'مورد',importer:'مستورد',distributor:'موزع',horeca:'هوريكا',admin:'مدير'}},marketRoles:['supplier','importer','distributor','horeca','admin'],sellerRoles:['supplier','importer','distributor'],audienceRoles:['supplier','importer','distributor','horeca'],createClient:()=>client,resolveMembership:async()=>account,
   createUserWithSetupLink:()=>new Promise(resolve=>{finishLink=resolve;}),
-  escapeHtml:String,formatMoney,formatPricePerKg,formatConverted:String,fxForm:()=>'',
-  location:{hash:'',search:''},URLSearchParams,Intl,setInterval(){},
+  escapeHtml:String,formatMoney,formatPricePerKg,formatConverted:String,fxForm:()=>'',fxFields:()=>({}),
+  validateImage:()=>false,uploadImage:async()=>null,withImageUrls:async(_client,rows)=>rows,
+  location:{hash:'',search:''},URLSearchParams,Intl,setTimeout, setInterval(){},
   document:{documentElement:{},hidden:false,getElementById:node,addEventListener(){}},
   FormData:class {
     constructor(target){this.target=target;}
     get(name){return this.target?.values?.[name] ?? (name==='email'?'new@example.test':name==='role'?'supplier':null);}
+    getAll(name){const value=this.target?.values?.[name];return value==null?[]:Array.isArray(value)?value:[value];}
   },
   buyerOrderPrintHtml,buyerWhatsAppText,createBuyerOrderDocx,
   hasBuyerOriginMapCoordinates:()=>true,
@@ -69,7 +89,7 @@ const context = vm.createContext({
     mountedOriginMap={element,origins,handlers};
     return {remove(){}};
   },
-  navigator:{}, account, console
+  navigator:{}, crypto:globalThis.crypto, account, console
 });
 vm.runInContext(source,context);
 const run = code => vm.runInContext(code,context);
@@ -98,6 +118,30 @@ assert.equal(run('products.length'),0);
 assert.equal(run('productsLoading'),false);
 assert.equal(run('setupLink'),'');
 
+const adminProductOrganization=directoryOrganization('org-supplier','Supplier Co','supplier');
+context.adminProductOrganization=adminProductOrganization;
+const adminProductValues={
+  product_owner:'org-supplier:supplier',image:null,sku:'ADMIN-1',name_en:'Apples',name_ar:'تفاح',
+  category_en:'Fruit',category_ar:'فاكهة',origin_country:'TN',packaging:'Carton',
+  net_weight_kg:'10',stock_cartons:'4',price_per_carton:'12.5',currency:'USD',
+  price_term:'CIF',price_destination:'Kuwait',status:'published'
+};
+context.adminProductValues=adminProductValues;
+run("current=account;language='en';activeAdminView='products';organizations=[adminProductOrganization];products=[];productsLoaded=true;productsLoading=false;productsError='';show();");
+assert.match(node('root').innerHTML,/Visible to \(choose one or more roles\)/);
+assert.match(node('root').innerHTML,/name="audience" value="horeca"/);
+run("language='ar';show();");
+assert.match(node('root').innerHTML,/مرئي لـ \(اختر دوراً أو أكثر\)/);
+run("language='en';show();");
+await node('product-form').submit({preventDefault(){},currentTarget:{values:{...adminProductValues,audience:[]}}});
+assert.equal(productInserts.length,0,'an administrator cannot create a product without selecting an audience');
+assert.equal(node('product-message').textContent,'Select at least one audience role.');
+await node('product-form').submit({preventDefault(){},currentTarget:{values:{...adminProductValues,audience:['horeca','importer','horeca']}}});
+assert.equal(productInserts.length,1);
+assert.deepEqual(JSON.parse(JSON.stringify(productInserts[0].audience_roles)),['importer','horeca'],
+  'administrator audience roles are validated, de-duplicated and kept in canonical order');
+assert.equal(productInserts[0].audience_override,true,'administrator choices are sent as an explicit override');
+
 const draft={id:'draft-a',organization_id:'org-a',sales_channel:'source',status:'draft',
   sku:'A-1',name_en:'Apples',name_ar:'تفاح',origin_country:'TN',packaging:'Carton',
   net_weight_kg:10,stock_cartons:3,price_per_carton:20,currency:'USD',
@@ -108,6 +152,7 @@ const publishButton={dataset:{publish:'draft-a'},disabled:false,textContent:'Pub
   closest(selector){return selector==='[data-publish]'?this:null;}};
 const accountsButton={dataset:{adminView:'accounts'},closest(selector){return selector==='[data-admin-view]'?this:null;}};
 run('current={user:{id:"supplier-a"},membership:{role:"supplier",organization_id:"org-a",status:"active"}}; products=[draft]; productsLoaded=true; busy=false; show();');
+assert.doesNotMatch(run('productForm()'),/product-audience|name="audience"/,'seller forms cannot set recipient roles');
 assert.match(node('root').innerHTML,/data-publish="draft-a"/);
 await node('catalog').click({target:publishButton});
 assert.equal(JSON.stringify(productUpdates[0]),JSON.stringify({
@@ -116,8 +161,10 @@ assert.equal(JSON.stringify(productUpdates[0]),JSON.stringify({
 }));
 assert.equal(run('products[0].status'),'published');
 
-const buyer={user:{id:'buyer-a'},membership:{role:'buyer',organization_id:'org-a',status:'active'}};
+const buyer={user:{id:'buyer-a'},membership:{role:'importer',organization_id:'org-a',status:'active'}};
 context.buyer=buyer;
+const horeca={user:{id:'horeca-a'},membership:{role:'horeca',organization_id:'horeca-org',status:'active'}};
+context.horeca=horeca;
 run("current=buyer; buyerView='resale'; products=[draft]; productsLoaded=true; show();");
 assert.doesNotMatch(node('root').innerHTML,/data-publish="draft-a"/);
 await node('catalog').click({target:publishButton});
@@ -136,12 +183,16 @@ await node('catalog').click({target:resalePublishButton});
 assert.equal(productUpdates.length,2,'buyers can publish their own resale offers');
 assert.equal(run('products[0].status'),'published');
 
-const liveOffer={...draft,id:'live-source',status:'published',sales_channel:'source',
+const liveOffer={...draft,id:'live-source',status:'published',sales_channel:'source',audience_roles:['importer'],
   organization_id:'supplier-org',name_en:'Live apples',origin_country:'TN',
   stock_cartons:4,price_per_carton:'12.500',currency:'USD'};
+const zeroWeightOffer={...liveOffer,id:'zero-weight',net_weight_kg:'0.000'};
 const otherOriginOffer={...liveOffer,id:'live-other',name_en:'Live pears',origin_country:'FR'};
+const horecaOffer={...liveOffer,id:'live-horeca',sales_channel:'distribution',audience_roles:['horeca'],
+  organization_id:'distributor-org',name_en:'HORECA live produce'};
 context.liveOffer=liveOffer;
 context.otherOriginOffer=otherOriginOffer;
+context.horecaOffer=horecaOffer;
 run("current=buyer;buyerView='explore';buyerOrigin='';buyerQuantity={};products=[liveOffer,otherOriginOffer,resaleDraft];productsLoaded=true;productsError='';show();");
 assert.match(node('root').innerHTML,/class="buyer-layout"/);
 assert.match(node('root').innerHTML,/data-buyer-view="explore"/);
@@ -162,7 +213,15 @@ run("buyerView='catalog';buyerOrigin='TN';buyerQuantity={'live-source':2};");
 assert.match(run('buyerCatalogMarkup()'),/Live apples/);
 assert.doesNotMatch(run('buyerCatalogMarkup()'),/Live pears/,'origin selection filters the live catalogue');
 assert.match(run('buyerCartMarkup()'),/USD 25\.00/,'cart totals multiply exact source prices by carton count');
-assert.match(run('buyerCartMarkup()'),/order has been created/,'cart clearly discloses unavailable order submission');
+assert.match(run('buyerCartMarkup()'),/Cart selections stay local until you confirm an order/);
+assert.match(run('buyerCartMarkup()'),/data-buyer-submit-order/,'cart offers the connected order submission action');
+context.zeroWeightOffer=zeroWeightOffer;
+run("products=[zeroWeightOffer];buyerQuantity={'zero-weight':1};buyerView='cart';");
+assert.match(run('buyerCartMarkup()'),/data-buyer-submit-order disabled/,
+  'checkout remains unavailable when a required carton weight is invalid');
+assert.match(run('buyerCartMarkup()'),/positive net weight per carton/,
+  'the cart explains why confirmation is unavailable');
+run("products=[liveOffer,otherOriginOffer,resaleDraft];buyerQuantity={'live-source':5};");
 run("buyerView='catalog';buyerQuantity={};show();");
 const addCartButton={dataset:{buyerQuantity:'live-source',buyerDelta:'1'},
   closest(selector){return selector==='[data-buyer-quantity]'?this:null;}};
@@ -188,8 +247,80 @@ run("buyerQuantity['live-source']=5;buyerDraftOrder=null;buyerView='cart';render
 assert.match(node('buyer-content').innerHTML,/exceeds current stock/i);
 assert.match(node('buyer-content').innerHTML,/data-buyer-prepare-order disabled/);
 
+const persistedOrder={
+  id:'order-a',reference:'ORD-ABC123',buyer_organization_id:'org-a',buyer_role:'importer',
+  seller_organization_id:'supplier-org',seller_channel:'source',buyer_company_name:'Buyer Co',
+  seller_company_name:'Supplier Co',status:'in_progress',created_at:'2026-11-22T10:00:00Z'
+};
+const persistedItem={
+  order_id:'order-a',sku:'A-1',name_en:'Live apples',name_ar:'تفاح',origin_country:'TN',
+  packaging:'Carton',net_weight_kg:'10.000',cartons:1,unit_price:'12.500',currency:'USD',
+  price_term:'CIF',price_destination:'Kuwait',line_total:'12.500',created_at:'2026-11-22T10:00:00Z'
+};
+context.persistedOrder=persistedOrder;
+context.persistedItem=persistedItem;
+orderRows=[persistedOrder];
+orderItemRows=[persistedItem];
+run("current=buyer;language='en';buyerView='cart';buyerQuantity={'live-source':1};buyerCheckoutKey='';ordersLoaded=false;ordersLoading=false;ordersError='';show();");
+const submitOrderButton={closest(selector){return selector==='[data-buyer-submit-order]'?this:null;}};
+nextOrderRpc={data:null,error:{code:'P0001',message:'stock_changed'}};
+await node('root').click({target:{closest(selector){
+  return selector==='[data-buyer-submit-order]'?submitOrderButton:null;
+}}});
+assert.equal(run("buyerQuantity['live-source']"),1,'a rejected checkout preserves the local cart');
+assert.equal(node('message').textContent,'The selected quantity exceeds current stock. Reduce it to continue.');
+const retryKey=run('buyerCheckoutKey');
+assert.ok(retryKey,'a retryable request retains its idempotency key');
+nextOrderRpc={data:[{id:'order-a',reference:'ORD-ABC123',seller_organization_id:'supplier-org',status:'in_progress'}],error:null};
+await node('root').click({target:{closest(selector){
+  return selector==='[data-buyer-submit-order]'?submitOrderButton:null;
+}}});
+assert.equal(orderRpcCalls.length,2,'confirming the cart calls the persisted-order RPC');
+assert.equal(orderRpcCalls[0].name,'fruidges_create_orders');
+assert.equal(orderRpcCalls[0].args.p_items[0].cartons,1);
+assert.equal(orderRpcCalls[0].args.p_idempotency_key,retryKey);
+assert.equal(orderRpcCalls[1].args.p_idempotency_key,retryKey,'a retry uses the same idempotency key');
+assert.equal(run('buyerCartCount()'),0,'a successful submission clears the cart');
+assert.match(node('buyer-content').innerHTML,/ORD-ABC123/,'the buyer sees the persisted order after checkout');
+assert.match(node('buyer-content').innerHTML,/In progress — awaiting seller confirmation/);
+assert.match(node('buyer-content').innerHTML,/data-order-action="cancel"/);
+assert.match(node('message').textContent,/Order created/);
+run("language='ar';show();");
+assert.equal(run("t('buyerOrderStatusInProgress')"),'قيد التنفيذ — بانتظار تأكيد البائع');
+assert.equal(context.document.documentElement.dir,'rtl');
+assert.match(node('root').innerHTML,/قيد التنفيذ — بانتظار تأكيد البائع/);
+
+run("current={user:{id:'seller-a'},membership:{role:'supplier',organization_id:'supplier-org',status:'active'}};language='en';purchaseOrders=[persistedOrder];ordersLoaded=true;ordersLoading=false;ordersError='';show();");
+assert.match(node('root').innerHTML,/data-order-action="accept"/,'the seller can accept its incoming order');
+assert.match(node('root').innerHTML,/data-order-action="reject"/,'the seller can decline its incoming order');
+run("current=account;activeAdminView='orders';purchaseOrders=[persistedOrder];ordersLoaded=true;ordersLoading=false;ordersError='';show();");
+assert.match(node('root').innerHTML,/ORD-ABC123/,'the administrator sees the order');
+assert.doesNotMatch(node('root').innerHTML,/data-order-action=/,'the administrator cannot change order status in this workflow');
+
+run("current=horeca;language='en';buyerView='explore';buyerOrigin='';buyerQuantity={};products=[horecaOffer,liveOffer];productsLoaded=true;productsError='';show();");
+assert.match(node('root').innerHTML,/class="buyer-layout"/);
+assert.match(node('root').innerHTML,/HORECA/);
+assert.match(node('root').innerHTML,/HORECA live produce/);
+assert.deepEqual(JSON.parse(JSON.stringify(run("buyerOffers().map(product=>product.id)"))),['live-horeca'],
+  'HORECA sees only published offers addressed to its role');
+assert.doesNotMatch(node('root').innerHTML,/data-buyer-view="resale"|My sales offers|data-product-form-toggle|id="product-form"|data-publish=/,
+  'HORECA has no resale navigation, product form or publish action');
+assert.equal(run('productForm()'),'');
+assert.equal(run('canPublish(resaleDraft)'),false,'HORECA cannot publish even an owned resale draft');
+const forbiddenResaleNav={dataset:{buyerView:'resale'},closest(selector){return selector==='[data-buyer-view]'?this:null;}};
+node('root').click({target:forbiddenResaleNav});
+assert.equal(run('buyerView'),'explore','HORECA cannot navigate to the resale workspace');
+run("buyerView='resale';renderBuyerContent();");
+assert.doesNotMatch(node('buyer-content').innerHTML,/data-product-form-toggle|id="product-form"|data-publish=/,
+  'a forced resale view falls back to the read-only exploration page');
+run("language='ar';buyerView='explore';show();");
+assert.equal(context.document.documentElement.lang,'ar');
+assert.equal(context.document.documentElement.dir,'rtl');
+assert.match(node('root').innerHTML,/الفنادق والمطاعم والمقاهي/);
+assert.doesNotMatch(node('root').innerHTML,/data-buyer-view="resale"|إضافة منتج|data-publish=/);
+
 nextProductUpdate={data:null,error:{code:'42501'}};
-run('current={user:{id:"supplier-a"},membership:{role:"supplier",organization_id:"org-a",status:"active"}}; products=[draft]; productsLoaded=true; show();');
+run("language='en';current={user:{id:'supplier-a'},membership:{role:'supplier',organization_id:'org-a',status:'active'}}; products=[draft]; productsLoaded=true; show();");
 await node('catalog').click({target:publishButton});
 assert.equal(node('publish-message').textContent,'Publication failed. Refresh the catalogue and try again.');
 assert.equal(publishButton.disabled,false);
@@ -243,14 +374,14 @@ context.buyerDirectoryProducts=[
   {...directoryProduct,id:'mislinked-source',organization_id:'org-buyer',sales_channel:'source',sku:'S-MISLINKED'}
 ];
 run("products=buyerDirectoryProducts; productsLoaded=true; productsLoading=false; productsError='';");
-const buyerDirectoryMarkup=run("adminDirectoryContent('buyer')");
+const buyerDirectoryMarkup=run("adminDirectoryContent('importer')");
 assert.match(buyerDirectoryMarkup,/Buyer Co/);
 assert.match(buyerDirectoryMarkup,/B-1/);
 assert.doesNotMatch(buyerDirectoryMarkup,/S-MISLINKED/);
 assert.match(buyerDirectoryMarkup,/offer audience that does not match this company role/);
 assert.match(buyerDirectoryMarkup,/Products from this company \(1\)/);
 run("language='ar';");
-assert.match(run("adminDirectoryContent('buyer')"),/بعض منتجات الكتالوج/);
+assert.match(run("adminDirectoryContent('importer')"),/بعض منتجات الكتالوج/);
 run("language='en'; products=[directoryProduct];");
 const countryForm={dataset:{organizationId:'org-supplier'},values:{countryCode:'tn'},
   querySelector(){return {disabled:false,textContent:'Save country'};}};
@@ -266,3 +397,14 @@ run('clearWorkspace()');
 assert.equal(run('organizations.length'),0);
 assert.equal(run('directoryLoaded'),false);
 console.log('PASS: admin company lists, live product details, country editing, locale behavior, and session cleanup.');
+
+run('current=null;busy=true;');
+await run('restoreStoredSession(revision)');
+assert.equal(run('current.user.id'),account.user.id,'Reload restores server-verified membership');
+run('current=null;');
+await run('restoreStoredSession(revision-1)');
+assert.equal(run('current'),null,'Cancelled restoration cannot resurrect a session');
+onAuth('SIGNED_OUT');
+assert.equal(run('busy'),false);
+assert.match(source,/persistSession: true/);
+console.log('PASS: persisted session configuration, authorized restoration and cancelled restoration.');

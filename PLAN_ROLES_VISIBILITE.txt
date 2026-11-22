@@ -1,0 +1,129 @@
+FRUIDGES — PLAN DE MODIFICATION DES RÔLES ET DE LA VISIBILITÉ
+Version : 22 novembre 2026
+
+1. DÉCISIONS VALIDÉES
+
+Cinq rôles distincts :
+- Fournisseur (supplier).
+- Importateur / Grossiste (importer).
+- Acheteur / Distributeur (distributor).
+- HORECA (horeca) : hôtels, restaurants, cafés et établissements assimilés.
+- Administrateur (admin).
+
+Circuit par défaut :
+Fournisseur -> Importateur / Grossiste.
+Importateur / Grossiste -> Acheteur / Distributeur.
+Acheteur / Distributeur -> HORECA.
+
+Chaque niveau peut contenir plusieurs entreprises. Les vendeurs voient leurs
+propres produits, y compris leurs brouillons. L’administrateur voit tout.
+Seules les offres publiées sont visibles aux destinataires commerciaux.
+
+Seul l’administrateur peut modifier les rôles destinataires d’un produit et
+en sélectionner plusieurs simultanément. Il peut rétablir le circuit par
+défaut. Une modification de prix ou de stock par le vendeur ne doit pas
+effacer une exception administrateur. Une exception ne publie pas un brouillon.
+HORECA ne reçoit pas de fonction de vente dans ce périmètre.
+
+Décision de migration du propriétaire : tous les anciens comptes
+Acheteur / Grossiste deviennent Importateur / Grossiste.
+Les anciens comptes Restaurant deviennent HORECA. Fournisseur et Admin restent
+inchangés. Aucun compte distributeur n’est créé automatiquement.
+
+2. INVENTAIRE ET PRÉSERVATION
+
+[Préparé] SQL 12-market-roles-inventory.sql : lecture seule, entreprises,
+rôles actuels, nombre de comptes et de produits publiés.
+[À faire par le propriétaire] Exécuter ce fichier seul et vérifier le résultat.
+[À faire avant migration] Sauvegarder les tables, politiques et fonctions
+concernées par les moyens de sauvegarde du projet Supabase.
+
+Aucun utilisateur, produit, prix, stock ou fichier photo ne doit être supprimé.
+Les produits source existants auront les importateurs comme public par défaut.
+Les offres resale existantes auront les distributeurs comme public par défaut.
+Les offres sans canal restent sans destinataire commercial ; elles nécessitent
+une vérification administrateur. Leur propriétaire et l’admin gardent l’accès.
+
+3. MODÈLE ET SÉCURITÉ
+
+[Développé localement] Module market-access.js : cinq rôles, vendeurs,
+publics par défaut et règles des exceptions. Tests de matrice métier ajoutés.
+
+[Préparé et testé localement] SQL 13-market-roles-and-visibility.sql :
+- Reclassement buyer/wholesaler -> importer et restaurant -> horeca.
+- Ajout du canal distribution pour les ventes distributeur -> HORECA.
+- Ajout de audience_roles et audience_override aux produits.
+- Initialisation de la visibilité des offres existantes.
+- Politiques RLS de lecture selon les destinataires, le propriétaire et l’admin.
+- Protection des écritures, de l’organisation vendeuse et du public.
+- Calcul du public par défaut côté base à la création, y compris pour Excel.
+- RPC réservée à l’administrateur actif pour définir plusieurs publics ou
+  revenir au défaut. Le serveur contrôle auth.uid(), pas un rôle envoyé librement.
+- Mise à jour du provisioning des comptes et des permissions des photos privées.
+
+Les photos suivent la visibilité de leur produit. Une URL signée déjà délivrée
+peut rester utilisable jusqu’à expiration (durée actuelle : 10 minutes).
+Les fichiers déjà téléchargés ne peuvent pas être révoqués rétroactivement.
+
+4. APPLICATION ET FONCTIONS SERVEUR
+
+[Développé localement]
+- Connexion et restauration de session : reconnaissance des cinq rôles.
+- Création de comptes : les cinq rôles sont proposés à l’administrateur.
+- Annuaire : distinction importateurs, distributeurs et HORECA.
+- Importateurs et distributeurs disposent d’un catalogue d’achat et de leurs
+  propres offres de vente, avec le public autorisé par Supabase.
+- Formulaire produit et import Excel : entreprise vendeuse obligatoire parmi
+  fournisseurs, importateurs et distributeurs ; aucun public choisi par un vendeur.
+- Popup produit administrateur : cases à cocher des rôles destinataires,
+  enregistrement et retour au public par défaut.
+- Libellés anglais/arabe adaptés. Liste, miniatures, popup et pagination conservées.
+- Les helpers des fonctions admin-create-user et admin-organizations reconnaissent
+  les nouveaux rôles ; ces fonctions devront être redéployées.
+
+Les fichiers historiques SQL 01 à 11 restent inchangés : ce sont des étapes
+antérieures, pas des instructions à réexécuter pour cette évolution.
+
+5. VALIDATION
+
+[Réussi localement] Tests métier : tous les couples vendeur/destinataire,
+brouillons, propriétaire, administrateur, comptes suspendus et anonyme.
+[Réussi localement] PostgreSQL isolé PGlite : migration des rôles, trois circuits,
+exception multirôle admin, retrait d’exception, refus de modification par vendeur.
+[Réussi localement] Suite de non-régression (session, annuaire, catalogue, import,
+photos, documents et tests SQL existants).
+[À effectuer] Recette visuelle desktop/mobile en anglais et arabe après migration.
+[À effectuer] Tests API avec de vrais comptes JWT sur le projet Supabase :
+deux fournisseurs, deux importateurs, deux distributeurs, HORECA et admin.
+Vérifier lecture des offres ET des photos, et refus des écritures interentreprises.
+
+Les tests locaux ne prouvent pas à eux seuls le déploiement ni la sécurité de
+l’environnement hébergé. Aucune migration distante n’a été appliquée par l’agent.
+
+6. ORDRE DE MISE EN SERVICE — UNE ÉTAPE À LA FOIS
+
+1) Exécuter uniquement le SQL 12 d’inventaire. Vérifier le résultat ensemble.
+2) Préparer la sauvegarde ; prévoir une courte interruption de l’application.
+3) Exécuter uniquement le SQL 13 validé. La transaction doit réussir entièrement.
+4) Redéployer admin-create-user, vérifier le résultat.
+5) Redéployer admin-organizations, vérifier le résultat.
+6) Reconstruire/redémarrer le frontend et actualiser le navigateur.
+7) Reconnexion des utilisateurs afin de charger leurs nouveaux rôles.
+8) Recette par rôle, puis validation du propriétaire.
+9) Déploiement GitHub/Vercel lorsque la recette est validée et la cible confirmée.
+
+Ne pas déployer le nouveau frontend seul sur l’ancien schéma : il attend les
+nouveaux rôles et les colonnes audience_roles / audience_override.
+La compilation de validation utilise un fichier temporaire, sans remplacer le
+dist actuellement servi avant l’application de la migration.
+
+7. RETOUR ET LIMITES
+
+Une erreur pendant SQL 13 annule sa transaction. Après réussite, un retour au
+seul ancien frontend n’est pas compatible avec les nouveaux rôles. Préférer une
+correction en avant ; tout retour de base doit utiliser la sauvegarde et tenir
+compte des comptes, produits et exceptions créés depuis la migration.
+
+Le workflow expédition, contrôle qualité, FEFO et précommande n’est pas ajouté
+par cette évolution : la validation porte sur les rôles et la visibilité.
+Les fonctionnalités précédentes de commande restent dans leur état documenté.

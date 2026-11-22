@@ -1,5 +1,6 @@
 import {unzipSync,strFromU8} from 'fflate';
 import {escapeHtml as esc, fxForm, fxFields} from './catalog-format.js';
+import {marketRoleLabels,normalizeAudience} from './market-access.js';
 export function readOrderWorkbook(bytes){
  const zip=unzipSync(bytes,{filter:entry=>{
   if(entry.originalSize>12*1024*1024)throw Error('Workbook too large');
@@ -36,8 +37,9 @@ export function readOrderWorkbook(bytes){
  if(matches.length!==1||!matches[0].length||matches[0].length>500)throw Error('format');
  return matches[0];
 }
-export async function prepareProducts(rows,owner,origin){
- if(!owner||!['source','resale'].includes(owner.channel)||!/^[A-Z]{2}$/.test(origin))throw Error('settings');
+export async function prepareProducts(rows,owner,origin,audience){
+ if(!owner||!['source','resale','distribution'].includes(owner.channel)||!/^[A-Z]{2}$/.test(origin))throw Error('settings');
+ const selectedAudience=audience===undefined?undefined:normalizeAudience(audience);
  const result=[],seen=new Set();
  for(const r of rows){
   if(!['USD','KWD'].includes(r.currency))throw Error(`currency:${r.currency}`);
@@ -47,30 +49,35 @@ export async function prepareProducts(rows,owner,origin){
   const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([r.name_en,r.packaging,String(Number(r.net_weight_kg)),origin])));
   const sku='XL-'+Array.from(new Uint8Array(digest)).map(b=>b.toString(16).padStart(2,'0')).join('');
   if(seen.has(sku))throw Error('duplicate:'+r.row);seen.add(sku);
-  result.push({organization_id:owner.id,sales_channel:owner.channel,sku,name_en:r.name_en,name_ar:r.name_ar,category_en:r.category_en,origin_country:origin,packaging:r.packaging,net_weight_kg:r.net_weight_kg,stock_cartons:stock,price_per_carton:r.price_per_carton,currency:r.currency,price_term:'CIF',price_destination:'KWI',photo_path:null,photo_status:'missing',status:'draft'});
+  const product={organization_id:owner.id,sales_channel:owner.channel,sku,name_en:r.name_en,name_ar:r.name_ar,category_en:r.category_en,origin_country:origin,packaging:r.packaging,net_weight_kg:r.net_weight_kg,stock_cartons:stock,price_per_carton:r.price_per_carton,currency:r.currency,price_term:'CIF',price_destination:'KWI',photo_path:null,photo_status:'missing',status:'draft'};
+  if(selectedAudience)Object.assign(product,{audience_roles:selectedAudience,audience_override:true});
+  result.push(product);
  }
  return result;
 }
-const labels={en:{open:'Import Excel',owner:'Supplier / Buyer',file:'Excel file (.xlsx, max 5 MB)',origin:'Origin country (2 letters, applies to all rows)',preview:'Preview',confirm:'Import as drafts',previewRow:'Row',previewProduct:'Product',previewArabic:'Arabic name',previewPack:'Packaging',previewWeight:'Net weight / carton',previewCIF:'CIF price / carton',previewStock:'Available stock (cartons)',previewCalculated:'Formula value',note:'Last 3 columns are excluded. Landed-cost columns are not imported as CIF prices. Enter available stock separately for each product below; order quantities are not stock. Photos are not imported. Cached formula values require review. Existing SKUs are skipped, never overwritten.',review:'Review calculated values (*). Uncheck rows to exclude them; correct Size/pack or price here. Enter stock for each selected row. Duplicate products must be resolved before importing.',currencyUnsupported:'CIF prices must be provided in USD or KWD. No currency conversion or landed-cost substitution is performed.',error:'Import blocked: check the format, required values, duplicates and currency or exchange-rate fields. Row: ',success:'New products imported: ',ready:'Rows ready: ',cancel:'Close'},ar:{open:'استيراد Excel',owner:'المورد / المشتري',file:'ملف Excel (.xlsx، حتى 5 ميغابايت)',origin:'بلد المنشأ (حرفان، لجميع الصفوف)',preview:'معاينة',confirm:'استيراد كمسودات',previewRow:'الصف',previewProduct:'المنتج',previewArabic:'الاسم بالعربية',previewPack:'التعبئة',previewWeight:'الوزن الصافي / كرتون',previewCIF:'سعر CIF / كرتون',previewStock:'المخزون المتاح (كراتين)',previewCalculated:'قيمة محسوبة',note:'تُستبعد آخر 3 أعمدة. لا تُستورد أعمدة التكلفة النهائية كسعر CIF. أدخل مخزون كل منتج على حدة أدناه؛ كميات الطلب ليست مخزوناً. لا تُستورد الصور. راجع القيم المحسوبة. يتم تخطي الرموز الموجودة دون تعديلها.',review:'راجع القيم المحسوبة (*). ألغ تحديد الصفوف لاستبعادها أو صحح الحجم والسعر. أدخل مخزون كل صف محدد. يجب معالجة التكرارات قبل الاستيراد.',currencyUnsupported:'يجب إدخال أسعار CIF بالدولار الأمريكي USD أو الدينار الكويتي KWD. لا يتم تحويل العملات أو استبدالها بتكلفة نهائية.',error:'تعذر الاستيراد: تحقق من التنسيق والقيم والتكرار والعملة وأسعار الصرف. الصف: ',success:'المنتجات الجديدة المستوردة: ',ready:'الصفوف الجاهزة: ',cancel:'إغلاق'}};
-export function mountExcelImport(host,client,language,owners,isCurrent,onSaved){
+const labels={en:{open:'Import Excel',owner:'Supplier / Buyer',file:'Excel file (.xlsx, max 5 MB)',origin:'Origin country (2 letters, applies to all rows)',audience:'Visible to (choose one or more roles)',audienceHint:'After publication, active accounts with any selected role can view these offers.',audienceRequired:'Select at least one audience role.',preview:'Preview',confirm:'Import as drafts',previewRow:'Row',previewProduct:'Product',previewArabic:'Arabic name',previewPack:'Packaging',previewWeight:'Net weight / carton',previewCIF:'CIF price / carton',previewStock:'Available stock (cartons)',previewCalculated:'Formula value',note:'Last 3 columns are excluded. Landed-cost columns are not imported as CIF prices. Enter available stock separately for each product below; order quantities are not stock. Photos are not imported. Cached formula values require review. Existing SKUs are skipped, never overwritten.',review:'Review calculated values (*). Uncheck rows to exclude them; correct Size/pack or price here. Enter stock for each selected row. Duplicate products must be resolved before importing.',currencyUnsupported:'CIF prices must be provided in USD or KWD. No currency conversion or landed-cost substitution is performed.',error:'Import blocked: check the format, required values, duplicates and currency or exchange-rate fields. Row: ',success:'New products imported: ',ready:'Rows ready: ',cancel:'Close'},ar:{open:'استيراد Excel',owner:'المورد / المشتري',file:'ملف Excel (.xlsx، حتى 5 ميغابايت)',origin:'بلد المنشأ (حرفان، لجميع الصفوف)',audience:'مرئي لـ (اختر دوراً أو أكثر)',audienceHint:'بعد النشر، يمكن للحسابات النشطة ذات أي دور محدد مشاهدة هذه العروض.',audienceRequired:'اختر دوراً واحداً على الأقل لجمهور المنتج.',preview:'معاينة',confirm:'استيراد كمسودات',previewRow:'الصف',previewProduct:'المنتج',previewArabic:'الاسم بالعربية',previewPack:'التعبئة',previewWeight:'الوزن الصافي / كرتون',previewCIF:'سعر CIF / كرتون',previewStock:'المخزون المتاح (كراتين)',previewCalculated:'قيمة محسوبة',note:'تُستبعد آخر 3 أعمدة. لا تُستورد أعمدة التكلفة النهائية كسعر CIF. أدخل مخزون كل منتج على حدة أدناه؛ كميات الطلب ليست مخزوناً. لا تُستورد الصور. راجع القيم المحسوبة. يتم تخطي الرموز الموجودة دون تعديلها.',review:'راجع القيم المحسوبة (*). ألغ تحديد الصفوف لاستبعادها أو صحح الحجم والسعر. أدخل مخزون كل صف محدد. يجب معالجة التكرارات قبل الاستيراد.',currencyUnsupported:'يجب إدخال أسعار CIF بالدولار الأمريكي USD أو الدينار الكويتي KWD. لا يتم تحويل العملات أو استبدالها بتكلفة نهائية.',error:'تعذر الاستيراد: تحقق من التنسيق والقيم والتكرار والعملة وأسعار الصرف. الصف: ',success:'المنتجات الجديدة المستوردة: ',ready:'الصفوف الجاهزة: ',cancel:'إغلاق'}};
+export function mountExcelImport(host,client,language,owners,isCurrent,onSaved,audienceOptions=[]){
  const t=labels[language];let prepared=null,loading=false;
- host.innerHTML=`<details class="excel-import"><summary>${t.open}</summary><form><label>${t.owner}<select name="owner" required><option value="">—</option>${owners.map((o,i)=>`<option value="${i}">${esc(o.name)} — ${o.channel==='source'?(language==='ar'?'مورد':'Supplier'):(language==='ar'?'مشتري / تاجر جملة':'Buyer / wholesaler')}</option>`).join('')}</select></label><label>${t.file}<input name="file" type="file" accept=".xlsx" required></label><label>${t.origin}<input name="origin" maxlength="2" pattern="[A-Za-z]{2}" required></label>${fxForm(language)}<p>${t.note}</p><button>${t.preview}</button></form><p data-status role="status"></p><div data-preview></div><button type="button" data-confirm hidden>${t.confirm}</button></details>`;
+ const roles=audienceOptions.length?normalizeAudience(audienceOptions):[];
+ host.innerHTML=`<details class="excel-import"><summary>${t.open}</summary><form><label>${t.owner}<select name="owner" required><option value="">—</option>${owners.map((o,i)=>`<option value="${i}">${esc(o.name)} — ${o.channel==='source'?(language==='ar'?'مورد':'Supplier'):o.channel==='resale'?(language==='ar'?'مستورد / تاجر جملة':'Importer / Wholesaler'):(language==='ar'?'مشتري / موزع':'Buyer / Distributor')}</option>`).join('')}</select></label>${roles.length?`<fieldset class="product-audience"><legend>${t.audience}</legend><p>${t.audienceHint}</p><div class="product-audience-options">${roles.map(role=>`<label><input type="checkbox" name="audience" value="${role}"> ${esc(marketRoleLabels[language][role])}</label>`).join('')}</div></fieldset>`:''}<label>${t.file}<input name="file" type="file" accept=".xlsx" required></label><label>${t.origin}<input name="origin" maxlength="2" pattern="[A-Za-z]{2}" required></label>${fxForm(language)}<p>${t.note}</p><button>${t.preview}</button></form><p data-status role="status"></p><div data-preview></div><button type="button" data-confirm hidden>${t.confirm}</button></details>`;
  const q=s=>host.querySelector(s),alive=()=>host.isConnected&&isCurrent();
  q('form').addEventListener('input',()=>{prepared=null;q('[data-confirm]').hidden=true;q('[data-preview]').innerHTML='';});
  q('form').addEventListener('submit',async e=>{
   e.preventDefault();if(loading)return;loading=true;prepared=null;q('[data-confirm]').hidden=true;q('form button').disabled=true;
   const form=new FormData(e.currentTarget);
-  try{const file=form.get('file');if(!file||file.size>5*1024*1024||!file.name.toLowerCase().endsWith('.xlsx'))throw Error('file');
+  try{  const file=form.get('file');if(!file||file.size>5*1024*1024||!file.name.toLowerCase().endsWith('.xlsx'))throw Error('file');
+  const audience=roles.length?form.getAll('audience').map(String).filter(role=>roles.includes(role)):undefined;
+  if(roles.length&&!audience.length)throw Error('audience');
    const rows=readOrderWorkbook(new Uint8Array(await file.arrayBuffer()));
    const unsupportedCurrency=rows.find(r=>!['USD','KWD'].includes(r.currency));
    if(unsupportedCurrency)throw Error(`currency:${unsupportedCurrency.currency}`);
    const owner=owners[Number(form.get('owner'))];if(!owner)throw Error('owner');
-   if(!alive())return;prepared={rows,form,owner};
+   if(!alive())return;prepared={rows,form,owner,audience};
    q('[data-preview]').innerHTML=`<p>${t.review}</p><div class="admin-user-table"><table><thead><tr><th>${t.previewRow}</th><th>${t.previewProduct}</th><th>${t.previewArabic}</th><th>${t.previewPack}</th><th>${t.previewWeight}</th><th>${t.previewCIF}</th><th>${t.previewStock}</th><th>${t.previewCalculated}</th></tr></thead><tbody>${rows.map(r=>`<tr><td><input type="checkbox" data-include="${r.row}" aria-label="${t.previewRow} ${r.row}" checked>${r.row}</td><td>${esc(r.name_en)}</td><td dir="rtl">${esc(r.name_ar)}</td><td><input data-pack="${r.row}" aria-label="${t.previewPack} ${r.row}" value="${esc(r.packaging)}"></td><td>${esc(r.net_weight_kg)} kg</td><td><input data-price="${r.row}" aria-label="${t.previewCIF} ${r.row}" value="${esc(r.price_per_carton)}">${esc(r.currency)}</td><td><input data-stock="${r.row}" type="number" min="0" step="1" inputmode="numeric" aria-label="${t.previewStock} ${r.row}" value=""></td><td>${r.calculated?'*':''}</td></tr>`).join('')}</tbody></table></div>`;
    q('[data-status]').textContent=t.ready+rows.length;q('[data-confirm]').hidden=false;
   }catch(error){if(alive()){
    const currencyError=/^currency:([A-Z]{3})$/.exec(String(error.message));
-   q('[data-status]').textContent=currencyError?`${t.currencyUnsupported} (${currencyError[1]}).`:t.error+String(error.message).slice(0,80);
+   q('[data-status]').textContent=error.message==='audience'?t.audienceRequired:currencyError?`${t.currencyUnsupported} (${currencyError[1]}).`:t.error+String(error.message).slice(0,80);
   }}
   finally{loading=false;if(alive())q('form button').disabled=false;}
  });
@@ -79,7 +86,7 @@ export function mountExcelImport(host,client,language,owners,isCurrent,onSaved){
   try{
    const selected=prepared.rows.filter(r=>q(`[data-include="${r.row}"]`).checked).map(r=>({...r,packaging:q(`[data-pack="${r.row}"]`).value.trim(),price_per_carton:q(`[data-price="${r.row}"]`).value.trim(),stock_cartons:q(`[data-stock="${r.row}"]`).value.trim()}));
    if(!selected.length)throw Error('empty');
-   const payload=await prepareProducts(selected,prepared.owner,String(prepared.form.get('origin')).toUpperCase());
+   const payload=await prepareProducts(selected,prepared.owner,String(prepared.form.get('origin')).toUpperCase(),prepared.audience);
    for(const p of payload)Object.assign(p,fxFields(prepared.form,p.currency));
    if(!alive())return;
    const {data,error}=await client.from('fruidges_products').upsert(payload,{onConflict:'organization_id,sku',ignoreDuplicates:true}).select('id');

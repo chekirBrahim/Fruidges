@@ -11,16 +11,16 @@ const organizations = [
 const memberships = [
   {organization_id:'org-supplier',role:'supplier',status:'active'},
   {organization_id:'org-supplier',role:'supplier',status:'pending'},
-  {organization_id:'org-buyer',role:'wholesaler',status:'active'},
-  {organization_id:'org-restaurant',role:'restaurant',status:'suspended'},
+  {organization_id:'org-buyer',role:'importer',status:'active'},
+  {organization_id:'org-restaurant',role:'horeca',status:'suspended'},
   {organization_id:'org-admin',role:'admin',status:'active'}
 ];
 const directory = buildOrganizationDirectory(organizations, memberships);
 assert.equal(directory.length, 3, 'admin-only organizations are not business listings');
 assert.equal(directory.find(row => row.id === 'org-supplier').membership_counts.supplier.pending, 1);
-assert.equal(directory.find(row => row.id === 'org-buyer').membership_counts.buyer.active, 1,
+assert.equal(directory.find(row => row.id === 'org-buyer').membership_counts.importer.active, 1,
   'legacy wholesaler membership is grouped with buyers');
-assert.equal(directory.find(row => row.id === 'org-restaurant').membership_counts.restaurant.suspended, 1);
+assert.equal(directory.find(row => row.id === 'org-restaurant').membership_counts.horeca.suspended, 1);
 assert.equal(directory.find(row => row.id === 'org-buyer').country_code, null);
 assert.equal(JSON.stringify(directory).includes('email'), false, 'directory does not return account emails');
 assert.throws(() => buildOrganizationDirectory(organizations, [

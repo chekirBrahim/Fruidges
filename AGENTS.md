@@ -37,3 +37,11 @@ Exécuter les vérifications adaptées et les contrôles imposés par le dépôt
 - Étape initiale : démonstration locale fidèle. Aucun accès réel ni sécurité serveur dans cette étape.
 
 - Décision confirmée : connexion commune, aucun sélecteur de rôle, un espace par acteur. Rôles attribués par administrateur côté serveur dans la future version connectée.
+
+## Décisions du 22 novembre 2026 — priorité sur les matrices historiques
+- Rôles : supplier, importer, distributor, horeca, admin.
+- Circuit par défaut : supplier -> importer -> distributor -> horeca.
+- L’admin voit tout et peut attribuer plusieurs rôles destinataires par produit ; les vendeurs ne peuvent jamais modifier ce public.
+- Tous les anciens buyer/wholesaler deviennent importer, restaurant devient horeca. Aucun reclassement automatique vers distributor.
+- Le propriétaire applique les SQL lui-même, un fichier à la fois avec vérification entre étapes.
+- Suivi détaillé : PLAN_ROLES_VISIBILITE.txt. Les modifications préparées ne sont pas encore appliquées à Supabase.

@@ -1,3 +1,4 @@
+import {marketRoles, sellerRoles, audienceRoles, marketRoleLabels} from './market-access.js';
 import {mountExcelImport} from './excel-import.js';
 import {mountAdminUsers} from './admin-panel.js';
 import {uploadImage, validateImage, withImageUrls} from './product-images.js';
@@ -15,29 +16,44 @@ let passwordSetupReady = false;
 
 const client = createClient('https://otaodwohbksacvbheshd.supabase.co',
   'sb_publishable_w4Qp1zBSckxKE5jfAo1QHg_ejNrt16J', {
-    auth: { persistSession: false, autoRefreshToken: true, detectSessionInUrl: true }
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
   });
 
-const productFields = 'id,organization_id,sales_channel,sku,name_en,name_ar,category_en,category_ar,origin_country,packaging,net_weight_kg,stock_cartons,price_per_carton,currency,price_term,price_destination,photo_path,photo_status,status,created_at,fx_usd,fx_kwd,fx_date,fx_source';
+const productFields = 'id,organization_id,sales_channel,sku,name_en,name_ar,category_en,category_ar,origin_country,packaging,net_weight_kg,stock_cartons,price_per_carton,currency,price_term,price_destination,photo_path,photo_status,status,audience_roles,audience_override,created_at,fx_usd,fx_kwd,fx_date,fx_source';
 
 const text = {
   en: {
+    importer:'Importer / Wholesaler',distributor:'Buyer / Distributor',horeca:'HORECA',adminDistributors:'Buyers / Distributors',visibilityTitle:'Product visibility',visibilitySave:'Save visibility',visibilityDefault:'Restore default audience',visibilityError:'Unable to update visibility.',distribution:'HORECA',
     conversionMissing:'USD/KWD conversions unavailable: exchange rates not provided.',fxInvalid:'Provide both exchange rates, date and source, or leave all conversion fields empty.',
-    buyerExplorer:'Explore origins',buyerCatalog:'Buy from producers',buyerResale:'Sell to restaurants',buyerCart:'My cart',buyerOrders:'My orders',
-    buyerWelcome:'Discover products from around the world',buyerWelcomeSub:'Browse published supplier offers by the products’ stated country of origin.',
+    buyerExplorer:'Explore origins',buyerCatalog:'Purchase catalogue',buyerResale:'My sales offers',buyerCart:'My cart',buyerOrders:'My orders',
+    buyerWelcome:'Discover products from around the world',buyerWelcomeSub:'Browse published offers shared with your business, grouped by the products’ stated country of origin.',
     buyerOriginTitle:'Explore product origins',buyerOriginDescription:'Counts show live published products by origin, not supplier locations.',
     buyerCountrySearch:'Search a country…',buyerCountries:'Choose an origin country',buyerFlags:'Flags',buyerMap:'World map',buyerMapFlags:'Map + flags',
-    buyerNoOrigins:'No published supplier products with an origin country are available yet.',
-    buyerCatalogTitle:'Supplier product catalogue',buyerSearch:'Search products, categories or packaging…',buyerAllCategories:'All categories',
+    buyerNoOrigins:'No visible published offers with an origin country are available yet.',
+    buyerCatalogTitle:'Available offers',buyerSearch:'Search products, categories or packaging…',buyerAllCategories:'All categories',
     buyerProducts:'products',buyerStock:'Available stock',buyerOffer:'Supplier offer',buyerPerCarton:'per carton',
     buyerAddCarton:'Add one carton',buyerRemoveCarton:'Remove one carton',buyerCartTitle:'Purchase cart',
-    buyerCartHelp:'Review your selected cartons. Cart selections are local to this browser and are not submitted as orders.',
-    buyerCartEmpty:'Your cart is empty. Choose live supplier products to begin.',
-    buyerCartTotals:'Totals by currency',buyerOrdersUnavailable:'Order submission and order history are not connected yet. No order has been created.',
+    buyerCartHelp:'Review your selected cartons. Cart selections stay local until you confirm an order.',
+    buyerCartEmpty:'Your cart is empty. Choose an available published offer to begin.',
+    buyerCartTotals:'Totals by currency',
+    buyerOrderSubmit:'Confirm order',buyerOrderSubmitting:'Submitting order…',buyerOrderCreated:'Order created. Reserved cartons are awaiting seller confirmation.',
+    buyerOrdersLoading:'Loading orders…',buyerOrdersLoadError:'Orders could not be loaded. Confirm the order migration is applied and retry.',
+    buyerOrdersBuyerEmpty:'You have no purchase orders yet.',buyerOrdersSellerEmpty:'No orders are waiting for your company.',
+    buyerOrdersToSeller:'Orders I placed',buyerOrdersForSeller:'Orders to fulfill',
+    adminOrdersEmpty:'No orders have been submitted yet.',
+    buyerOrderStatusInProgress:'In progress — awaiting seller confirmation',buyerOrderStatusConfirmed:'Confirmed by seller',
+    buyerOrderStatusRejected:'Declined by seller',buyerOrderStatusCancelled:'Cancelled',
+    buyerOrderAccept:'Accept order',buyerOrderReject:'Decline order',buyerOrderCancel:'Cancel order',
+    buyerOrderUpdated:'Order status updated.',buyerOrderActionError:'Order status could not be updated. Refresh and retry.',
+    buyerOrderSubmitError:'Order was not submitted. Your cart is unchanged; check availability and retry.',
+    buyerOrderReference:'Reference',buyerOrderBuyer:'Buyer',buyerOrderSeller:'Seller',buyerOrderPlaced:'Placed',
+    buyerOrderItems:'Items',buyerOrderTotals:'Totals by currency',
+    buyerOrderOfferUnavailable:'An offer is no longer available for this account.',
+    buyerOrderServiceUnavailable:'Order service is unavailable. Confirm the order migration is applied.',
     buyerAddedToCart:'Added to your cart. The cart count has been updated.',
     buyerRemovedFromCart:'Cart quantity updated.',
     buyerStockLimit:'The selected quantity already reaches the available stock.',
-    buyerInvalidCart:'Review stock and prices before preparing the draft.',
+    buyerInvalidCart:'Review your selected quantities and prices before continuing.',
     buyerPrepareDraft:'Prepare purchase draft',
     buyerDraftReady:'Draft prepared locally. No order has been submitted.',
     buyerDraftActions:'Draft document and sharing',
@@ -54,9 +70,9 @@ const text = {
     buyerTotalWeight:'Total net weight',
     buyerTerm:'Price term / destination',
     buyerSupplierUnavailable:'Supplier details are not available in buyer access.',
-    buyerInvalidPrice:'A valid live price is required before preparing a draft.',
+    buyerInvalidPrice:'A valid price and positive net weight per carton are required before confirming.',
     buyerStockChanged:'The selected quantity exceeds current stock. Reduce it to continue.',
-    buyerViewOffers:'Browse supplier offers',buyerResaleIntro:'Manage only your own published resale offers for restaurants.',
+    buyerViewOffers:'Browse available offers',buyerResaleIntro:'Manage your own offers for the next distribution level.',
     buyerResaleEmpty:'You have no resale offers yet.',buyerRefresh:'Refresh live catalogue',
     buyerCountryFilter:'Showing products originating in',buyerClearCountry:'Show all origins',
     buyerMapUnavailable:'Some origin countries do not have map coordinates; use the country cards to browse every origin.',
@@ -67,10 +83,11 @@ const text = {
     buyerPage:'Page',buyerPrevious:'Previous',buyerNext:'Next',
     openProductForm:'Add a product',closeProductForm:'Close form',pagePrevious:'Previous',pageNext:'Next',productPage:'Page',
     closeDetails:'Close product details',
-    productOwner:'Product owner', chooseOwner:'Choose a supplier or buyer / wholesaler', ownerRequired:'Select an active supplier or buyer / wholesaler.', ownerUnknown:'Unassigned business', details:'Details',
+    productOwner:'Product owner', chooseOwner:'Choose a supplier, importer or distributor', ownerRequired:'Select an active supplier, importer or distributor.', ownerUnknown:'Unassigned business', details:'Details',
+    productAudience:'Visible to (choose one or more roles)',productAudienceHint:'After publication, active accounts with any selected role can view this offer.',audienceRequired:'Select at least one audience role.',
     publishProduct:'Publish', publishingProduct:'Publishing…', publishError:'Publication failed. Refresh the catalogue and try again.',
     productImage:'Product image (optional)', imageHint:'JPG, PNG or WebP · Maximum 5 MB', imageInvalid:'Choose a JPG, PNG or WebP image up to 5 MB.', imageUploadError:'Image upload failed. Check storage configuration and try again.', imageUnavailable:'Image unavailable. Refresh the catalogue.', unknownChannel:'Unclassified audience',
-    organizationName:'New company name (leave empty for an existing company)', organizationId:'Existing company ID (leave empty for a new company)', salesChannel:'Offer audience', source:'Buyers and wholesalers', resale:'Restaurants',
+    organizationName:'New company name (leave empty for an existing company)', organizationId:'Existing company ID (leave empty for a new company)', salesChannel:'Offer audience', source:'Importers / Wholesalers', resale:'Buyers / Distributors',
     title:'Welcome to Fruidges', intro:'Sign in to your professional workspace.',
     email:'Email address', password:'Password', login:'Sign in', busy:'Connecting…',
     logout:'Sign out', preview:'Open the separate demo',
@@ -89,8 +106,8 @@ const text = {
     adminNavigation:'Administrator navigation', adminOverview:'Overview',
     adminRequests:'Access requests', adminAccounts:'Accounts & roles',
     adminProducts:'Products', adminOrders:'Orders', adminAnalytics:'Analytics',
-    adminSuppliers:'Suppliers', adminBuyers:'Buyers / Wholesalers',
-    adminRestaurants:'Restaurants',
+    adminSuppliers:'Suppliers', adminBuyers:'Importers / Wholesalers',
+    adminRestaurants:'HORECA',
     adminOverviewDescription:'Live catalogue status and the main platform sections.',
     adminLiveNote:'Product counts come from the connected Supabase catalogue. Company directories require the secure admin-organizations function; login emails, requests and orders are not shown here.',
     adminTotalProducts:'Total products', adminSourcePublished:'Published supplier offers',
@@ -98,7 +115,7 @@ const text = {
     adminQuickAccess:'Workspace sections', adminProductsHint:'Review the live catalogue, offer audience and publication status.',
     adminAccountsHint:'Create an account; the server verifies and assigns its selected role and organization.',
     adminRequestsUnavailable:'Access-request management is not connected yet. No sample requests are shown.',
-    adminOrdersUnavailable:'Orders are not connected yet. No sample order data is shown.',
+    adminOrdersUnavailable:'Live orders shared with their buyer and seller organizations.',
     adminAccountNotice:'Account creation requires the secured admin-create-user function to be deployed and configured. The account list is not connected.',
     adminAnalyticsNote:'Only live product-catalogue counts are available here. User and order metrics are not connected.',
     directoryLoading:'Loading company directory from the secure service…',
@@ -151,22 +168,37 @@ const text = {
     preparingInvite:'Checking your invitation…'
   },
   ar: {
+    importer:'مستورد / تاجر جملة',distributor:'مشتري / موزع',horeca:'الفنادق والمطاعم والمقاهي',adminDistributors:'المشترون / الموزعون',visibilityTitle:'ظهور المنتج',visibilitySave:'حفظ الجمهور',visibilityDefault:'استعادة الجمهور الافتراضي',visibilityError:'تعذر تحديث الجمهور.',distribution:'الفنادق والمطاعم والمقاهي',
     conversionMissing:'تحويلات USD/KWD غير متاحة: أسعار الصرف غير محددة.',fxInvalid:'أدخل سعري الصرف والتاريخ والمصدر أو اترك جميع حقول التحويل فارغة.',
-    buyerExplorer:'استكشاف بلدان المنشأ',buyerCatalog:'الشراء من المنتجين',buyerResale:'البيع للمطاعم',buyerCart:'سلتي',buyerOrders:'طلباتي',
-    buyerWelcome:'اكتشف منتجات من مختلف أنحاء العالم',buyerWelcomeSub:'تصفح عروض الموردين المنشورة حسب بلد منشأ المنتج المسجل.',
+    buyerExplorer:'استكشاف بلدان المنشأ',buyerCatalog:'كتالوج الشراء',buyerResale:'عروض البيع الخاصة بي',buyerCart:'سلتي',buyerOrders:'طلباتي',
+    buyerWelcome:'اكتشف منتجات من مختلف أنحاء العالم',buyerWelcomeSub:'تصفح العروض المنشورة والمتاحة لشركتك حسب بلد منشأ المنتجات المسجل.',
     buyerOriginTitle:'استكشاف منشأ المنتجات',buyerOriginDescription:'الأعداد تمثل المنتجات المنشورة حسب المنشأ، ولا تمثل مواقع الموردين.',
     buyerCountrySearch:'ابحث عن بلد…',buyerCountries:'اختر بلد المنشأ',buyerFlags:'الأعلام',buyerMap:'خريطة العالم',buyerMapFlags:'الخريطة + الأعلام',
-    buyerNoOrigins:'لا توجد حالياً منتجات موردين منشورة مع تحديد بلد المنشأ.',
-    buyerCatalogTitle:'كتالوج منتجات الموردين',buyerSearch:'ابحث عن منتج أو فئة أو تعبئة…',buyerAllCategories:'جميع الفئات',
+    buyerNoOrigins:'لا توجد حالياً عروض منشورة متاحة مع تحديد بلد المنشأ.',
+    buyerCatalogTitle:'العروض المتاحة',buyerSearch:'ابحث عن منتج أو فئة أو تعبئة…',buyerAllCategories:'جميع الفئات',
     buyerProducts:'منتجات',buyerStock:'المخزون المتاح',buyerOffer:'عرض المورد',buyerPerCarton:'لكل كرتون',
     buyerAddCarton:'أضف كرتوناً',buyerRemoveCarton:'أزل كرتوناً',buyerCartTitle:'سلة الشراء',
-    buyerCartHelp:'راجع الكراتين المختارة. السلة محفوظة في هذا المتصفح ولا تُرسل كطلب.',
-    buyerCartEmpty:'سلتك فارغة. اختر منتجات الموردين المتاحة للبدء.',
-    buyerCartTotals:'الإجماليات حسب العملة',buyerOrdersUnavailable:'إنشاء الطلبات وسجلها غير متصلين بعد. لم يتم إنشاء أي طلب.',
+    buyerCartHelp:'راجع الكراتين المختارة. تبقى السلة محفوظة في هذا المتصفح حتى تأكيد الطلب.',
+    buyerCartEmpty:'سلتك فارغة. اختر عرضاً منشوراً ومتاحاً للبدء.',
+    buyerCartTotals:'الإجماليات حسب العملة',
+    buyerOrderSubmit:'تأكيد الطلب',buyerOrderSubmitting:'جارٍ إرسال الطلب…',buyerOrderCreated:'تم إنشاء الطلب. الكراتين المحجوزة بانتظار تأكيد البائع.',
+    buyerOrdersLoading:'جارٍ تحميل الطلبات…',buyerOrdersLoadError:'تعذر تحميل الطلبات. تحقق من تطبيق ترحيل الطلبات ثم أعد المحاولة.',
+    buyerOrdersBuyerEmpty:'ليس لديك طلبات شراء بعد.',buyerOrdersSellerEmpty:'لا توجد طلبات بانتظار شركتك.',
+    buyerOrdersToSeller:'الطلبات التي قدمتها',buyerOrdersForSeller:'طلبات قيد التجهيز لشركتك',
+    adminOrdersEmpty:'لم يتم تقديم أي طلبات بعد.',
+    buyerOrderStatusInProgress:'قيد التنفيذ — بانتظار تأكيد البائع',buyerOrderStatusConfirmed:'تم تأكيد الطلب من البائع',
+    buyerOrderStatusRejected:'رفض البائع الطلب',buyerOrderStatusCancelled:'ملغي',
+    buyerOrderAccept:'قبول الطلب',buyerOrderReject:'رفض الطلب',buyerOrderCancel:'إلغاء الطلب',
+    buyerOrderUpdated:'تم تحديث حالة الطلب.',buyerOrderActionError:'تعذر تحديث حالة الطلب. حدّث الصفحة وحاول مجدداً.',
+    buyerOrderSubmitError:'لم يتم إرسال الطلب. سلتك لم تتغير؛ تحقق من التوفر وحاول مجدداً.',
+    buyerOrderReference:'المرجع',buyerOrderBuyer:'المشتري',buyerOrderSeller:'البائع',buyerOrderPlaced:'تاريخ الإنشاء',
+    buyerOrderItems:'المنتجات',buyerOrderTotals:'الإجماليات حسب العملة',
+    buyerOrderOfferUnavailable:'لم يعد العرض متاحاً لهذا الحساب.',
+    buyerOrderServiceUnavailable:'خدمة الطلبات غير متاحة. تحقق من تطبيق ترحيل الطلبات.',
     buyerAddedToCart:'تمت الإضافة إلى السلة وتحديث عدد الكراتين.',
     buyerRemovedFromCart:'تم تحديث كمية السلة.',
     buyerStockLimit:'الكمية المحددة وصلت إلى المخزون المتاح.',
-    buyerInvalidCart:'راجع المخزون والأسعار قبل إعداد المسودة.',
+    buyerInvalidCart:'تحقق من الكميات والأسعار المختارة قبل المتابعة.',
     buyerPrepareDraft:'إعداد مسودة شراء',
     buyerDraftReady:'تم إعداد المسودة محلياً. لم يتم إرسال أي طلب.',
     buyerDraftActions:'مستند المسودة ومشاركتها',
@@ -183,9 +215,9 @@ const text = {
     buyerTotalWeight:'إجمالي الوزن الصافي',
     buyerTerm:'شرط السعر / الوجهة',
     buyerSupplierUnavailable:'بيانات المورد غير متاحة ضمن صلاحيات المشتري.',
-    buyerInvalidPrice:'يلزم سعر مباشر وصالح لإعداد المسودة.',
+    buyerInvalidPrice:'يلزم سعر صالح ووزن صافٍ موجب لكل كرتون قبل التأكيد.',
     buyerStockChanged:'الكمية المحددة تتجاوز المخزون الحالي. خفّضها للمتابعة.',
-    buyerViewOffers:'تصفح عروض الموردين',buyerResaleIntro:'أدر عروض إعادة البيع الخاصة بك للمطاعم فقط.',
+    buyerViewOffers:'تصفح العروض المتاحة',buyerResaleIntro:'أدر عروضك الخاصة للمرحلة التالية من التوزيع.',
     buyerResaleEmpty:'ليس لديك عروض إعادة بيع بعد.',buyerRefresh:'تحديث الكتالوج المباشر',
     buyerCountryFilter:'المنتجات ذات المنشأ في',buyerClearCountry:'عرض جميع بلدان المنشأ',
     buyerMapUnavailable:'لا تتوفر إحداثيات لبعض بلدان المنشأ؛ استخدم بطاقات البلدان لتصفح جميع المناشئ.',
@@ -196,10 +228,11 @@ const text = {
     buyerPage:'الصفحة',buyerPrevious:'السابق',buyerNext:'التالي',
     openProductForm:'إضافة منتج',closeProductForm:'إغلاق النموذج',pagePrevious:'السابق',pageNext:'التالي',productPage:'الصفحة',
     closeDetails:'إغلاق تفاصيل المنتج',
-    productOwner:'الجهة المالكة للمنتج', chooseOwner:'اختر مورداً أو مشترياً / تاجر جملة', ownerRequired:'اختر مورداً أو مشترياً / تاجر جملة نشطاً.', ownerUnknown:'جهة غير محددة', details:'التفاصيل',
+    productOwner:'الجهة المالكة للمنتج', chooseOwner:'اختر مورداً أو مستورداً أو موزعاً', ownerRequired:'اختر مورداً أو مستورداً أو موزعاً نشطاً.', ownerUnknown:'جهة غير محددة', details:'التفاصيل',
+    productAudience:'مرئي لـ (اختر دوراً أو أكثر)',productAudienceHint:'بعد النشر، يمكن للحسابات النشطة ذات أي دور محدد مشاهدة هذا العرض.',audienceRequired:'اختر دوراً واحداً على الأقل لجمهور المنتج.',
     publishProduct:'نشر', publishingProduct:'جارٍ النشر…', publishError:'تعذر النشر. حدّث الكتالوج وحاول مجدداً.',
     productImage:'صورة المنتج (اختياري)', imageHint:'JPG أو PNG أو WebP · الحد الأقصى 5 ميغابايت', imageInvalid:'اختر صورة JPG أو PNG أو WebP لا تتجاوز 5 ميغابايت.', imageUploadError:'تعذر رفع الصورة. تحقق من إعدادات التخزين وحاول مجدداً.', imageUnavailable:'الصورة غير متاحة. حدّث الكتالوج.', unknownChannel:'جمهور غير مصنف',
-    organizationName:'اسم الشركة الجديدة (اتركه فارغاً لشركة موجودة)', organizationId:'معرّف الشركة الموجودة (اتركه فارغاً لشركة جديدة)', salesChannel:'الجمهور المستهدف', source:'المشترون وتجار الجملة', resale:'المطاعم',
+    organizationName:'اسم الشركة الجديدة (اتركه فارغاً لشركة موجودة)', organizationId:'معرّف الشركة الموجودة (اتركه فارغاً لشركة جديدة)', salesChannel:'الجمهور المستهدف', source:'المستوردون / تجار الجملة', resale:'المشترون / الموزعون',
     title:'مرحباً بك في Fruidges', intro:'سجّل الدخول إلى مساحة عملك المهنية.',
     email:'البريد الإلكتروني', password:'كلمة المرور', login:'تسجيل الدخول',
     busy:'جارٍ الاتصال…', logout:'تسجيل الخروج', preview:'فتح النسخة التجريبية المنفصلة',
@@ -218,16 +251,16 @@ const text = {
     adminNavigation:'قائمة المسؤول', adminOverview:'نظرة عامة',
     adminRequests:'طلبات الوصول', adminAccounts:'الحسابات والأدوار',
     adminProducts:'المنتجات', adminOrders:'الطلبات', adminAnalytics:'الإحصاءات',
-    adminSuppliers:'الموردون', adminBuyers:'المشترون / تجار الجملة',
-    adminRestaurants:'المطاعم',
+    adminSuppliers:'الموردون', adminBuyers:'المستوردون / تجار الجملة',
+    adminRestaurants:'الفنادق والمطاعم والمقاهي',
     adminOverviewDescription:'حالة الكتالوج المباشر والأقسام الرئيسية للمنصة.',
-    adminLiveNote:'أعداد المنتجات من كتالوج Supabase المتصل. تتطلب أدلة الشركات دالة admin-organizations الآمنة؛ لا تُعرض عناوين الدخول الفردية، والطلبات غير متصلة بعد.',
+    adminLiveNote:'أعداد المنتجات من كتالوج Supabase المتصل. تتطلب أدلة الشركات دالة admin-organizations الآمنة؛ لا تُعرض عناوين الدخول الفردية أو طلبات الوصول. راجع صفحة الطلبات لمتابعة الطلبات المباشرة.',
     adminTotalProducts:'إجمالي المنتجات', adminSourcePublished:'عروض الموردين المنشورة',
     adminResalePublished:'عروض المشترين / تجار الجملة المنشورة', adminDraftProducts:'المنتجات غير المنشورة',
     adminQuickAccess:'أقسام مساحة العمل', adminProductsHint:'راجع الكتالوج المباشر والجمهور المستهدف وحالة النشر.',
     adminAccountsHint:'أنشئ حساباً؛ يتحقق الخادم من الدور والمؤسسة المختارين ويسندهما.',
     adminRequestsUnavailable:'إدارة طلبات الوصول غير متصلة بعد. لا تُعرض طلبات افتراضية.',
-    adminOrdersUnavailable:'الطلبات غير متصلة بعد. لا تُعرض بيانات طلبات افتراضية.',
+    adminOrdersUnavailable:'الطلبات المباشرة المشتركة مع شركات المشترين والبائعين.',
     adminAccountNotice:'يتطلب إنشاء الحساب نشر دالة admin-create-user الآمنة وتهيئتها. قائمة الحسابات غير متصلة بعد.',
     adminAnalyticsNote:'المتاح هنا هو أعداد المنتجات الفعلية فقط. إحصاءات المستخدمين والطلبات غير متصلة.',
     directoryLoading:'جارٍ تحميل دليل الشركات من الخدمة الآمنة…',
@@ -313,6 +346,14 @@ let buyerDraftOrder = null;
 let buyerMap = null;
 let buyerPage = 0;
 let buyerGeoMode = 'mixed';
+let purchaseOrders = [];
+let ordersLoading = false;
+let ordersLoaded = false;
+let ordersError = '';
+let orderLoadRequest = 0;
+let orderActionBusy = '';
+let orderSubmitting = false;
+let buyerCheckoutKey = '';
 
 function clearWorkspace() {
   buyerMap?.remove();
@@ -335,6 +376,14 @@ function clearWorkspace() {
   buyerSearch = '';
   buyerQuantity = {};
   buyerDraftOrder = null;
+  purchaseOrders = [];
+  ordersLoading = false;
+  ordersLoaded = false;
+  ordersError = '';
+  orderLoadRequest++;
+  orderActionBusy = '';
+  orderSubmitting = false;
+  buyerCheckoutKey = '';
   buyerPage = 0;
   buyerGeoMode = 'mixed';
 }
@@ -348,14 +397,22 @@ const t = key => text[language][key] || text[language].network;
 
 root.addEventListener('click', event => {
   const buyerNav = event.target.closest('[data-buyer-view]');
-  if (buyerNav && current?.membership.role === 'buyer') {
+  if (buyerNav && hasPurchaseWorkspace()) {
+    if (orderSubmitting) return;
+    if (!buyerNavigation().some(([view]) => view === buyerNav.dataset.buyerView)) return;
     buyerView = buyerNav.dataset.buyerView;
     if (buyerView !== 'cart') buyerPage = 0;
     show();
     return;
   }
+  const submitOrderButton=event.target.closest('[data-buyer-submit-order]');
+  if(submitOrderButton && hasPurchaseWorkspace())return submitBuyerOrder();
+  const orderActionButton=event.target.closest('[data-order-action]');
+  if(orderActionButton && current)return respondToOrder(orderActionButton.dataset.orderId,orderActionButton.dataset.orderAction);
+  const refreshOrdersButton=event.target.closest('[data-refresh-orders]');
+  if(refreshOrdersButton && current)return loadOrders();
   const buyerOriginButton = event.target.closest('[data-buyer-origin]');
-  if (buyerOriginButton && current?.membership.role === 'buyer') {
+  if (buyerOriginButton && hasPurchaseWorkspace()) {
     buyerOrigin = buyerOriginButton.dataset.buyerOrigin;
     buyerView = 'catalog';
     buyerPage = 0;
@@ -363,33 +420,33 @@ root.addEventListener('click', event => {
     return;
   }
   const buyerMode = event.target.closest('[data-buyer-geo-mode]');
-  if (buyerMode && current?.membership.role === 'buyer') {
+  if (buyerMode && hasPurchaseWorkspace()) {
     buyerGeoMode = buyerMode.dataset.buyerGeoMode;
     show();
     return;
   }
   const clearOrigin = event.target.closest('[data-buyer-clear-origin]');
-  if (clearOrigin && current?.membership.role === 'buyer') {
+  if (clearOrigin && hasPurchaseWorkspace()) {
     buyerOrigin = '';
     buyerPage = 0;
     renderBuyerContent();
     return;
   }
   const buyerCategoryButton = event.target.closest('[data-buyer-category]');
-  if (buyerCategoryButton && current?.membership.role === 'buyer') {
+  if (buyerCategoryButton && hasPurchaseWorkspace()) {
     buyerCategory = buyerCategoryButton.dataset.buyerCategory;
     buyerPage = 0;
     renderBuyerContent();
     return;
   }
   const buyerPager = event.target.closest('[data-buyer-page]');
-  if (buyerPager && current?.membership.role === 'buyer') {
+  if (buyerPager && hasPurchaseWorkspace()) {
     buyerPage = Number(buyerPager.dataset.buyerPage);
     renderBuyerContent();
     return;
   }
   const prepareBuyerOrder = event.target.closest('[data-buyer-prepare-order]');
-  if (prepareBuyerOrder && current?.membership.role === 'buyer') {
+  if (prepareBuyerOrder && hasPurchaseWorkspace()) {
     const result = createBuyerDraftOrder();
     if (result.error) {
       buyerDraftOrder = null;
@@ -403,16 +460,16 @@ root.addEventListener('click', event => {
     setBuyerStatus('buyerDraftReady');
     return;
   }
-  if (event.target.closest('[data-buyer-download-order]') && current?.membership.role === 'buyer') {
+  if (event.target.closest('[data-buyer-download-order]') && hasPurchaseWorkspace()) {
     downloadBuyerDraft();
     return;
   }
-  if (event.target.closest('[data-buyer-print-order]') && current?.membership.role === 'buyer') {
+  if (event.target.closest('[data-buyer-print-order]') && hasPurchaseWorkspace()) {
     printBuyerDraft();
     return;
   }
   const buyerQuantityButton = event.target.closest('[data-buyer-quantity]');
-  if (buyerQuantityButton && current?.membership.role === 'buyer') {
+  if (buyerQuantityButton && hasPurchaseWorkspace()) {
     const id = String(buyerQuantityButton.dataset.buyerQuantity || '');
     const delta = Number(buyerQuantityButton.dataset.buyerDelta);
     if (!id || ![-1,1].includes(delta)) return;
@@ -436,7 +493,7 @@ root.addEventListener('click', event => {
     return;
   }
   const removeUnavailable = event.target.closest('[data-buyer-remove-cart]');
-  if (removeUnavailable && current?.membership.role === 'buyer') {
+  if (removeUnavailable && hasPurchaseWorkspace()) {
     delete buyerQuantity[removeUnavailable.dataset.buyerRemoveCart];
     buyerDraftOrder = null;
     renderBuyerContent();
@@ -457,9 +514,10 @@ root.addEventListener('click', event => {
   activeAdminView = view;
   show();
   if (adminDirectoryRole(view) || view === 'products') return loadAdminDirectory();
+  if (view === 'orders') return loadOrders();
 });
 root.addEventListener('input', event => {
-  if (current?.membership.role !== 'buyer') return;
+  if (!hasPurchaseWorkspace()) return;
   if (event.target.id === 'buyer-country-search') {
     const query = event.target.value.trim().toLocaleLowerCase();
     root.querySelectorAll('[data-country-name]').forEach(card => {
@@ -509,7 +567,7 @@ function productCard(product, { showAudience = false, showPublish = true } = {})
     <p>${escapeHtml(formatPricePerKg(product.price_per_carton, product.net_weight_kg, product.currency))}</p>
     ${product.fx_usd && product.fx_kwd ? `<p>${escapeHtml(formatConverted(product.price_per_carton,product.fx_usd,'USD'))} · ${escapeHtml(formatConverted(product.price_per_carton,product.fx_kwd,'KWD'))}</p><p>${escapeHtml(product.fx_date)} · ${escapeHtml(product.fx_source)}</p>` : `<p>${escapeHtml(t('conversionMissing'))}</p>`}
     <p>${escapeHtml(product.price_term)}${destination ? ` · ${escapeHtml(destination)}` : ''}</p>
-    ${showAudience ? `<p>${escapeHtml(t('salesChannel'))}: ${escapeHtml(t(product.sales_channel === 'source' || product.sales_channel === 'resale' ? product.sales_channel : 'unknownChannel'))}</p>` : ''}
+    ${showAudience ? `<p>${escapeHtml(t('salesChannel'))}: ${escapeHtml((product.audience_roles||[]).map(role=>marketRoleLabels[language][role]||role).join(' · '))}</p>` : ''}
     <p>${stock > 0 ? `${escapeHtml(String(product.stock_cartons))} ${escapeHtml(t('carton'))}` : escapeHtml(t('noStock'))}</p>
     ${product.imageUrl ? `<img class="product-image" src="${escapeHtml(product.imageUrl)}" alt="${escapeHtml(name)}" loading="lazy">` : product.photo_status === 'available' ? `<p>${escapeHtml(t('imageUnavailable'))}</p>` : ''}
     ${product.photo_status === 'missing' ? `<p class="missing-photo">${escapeHtml(t('photoMissing'))}</p>` : ''}
@@ -518,12 +576,12 @@ function productCard(product, { showAudience = false, showPublish = true } = {})
 }
 
 function buyerOffers() {
-  return products.filter(product => product.sales_channel === 'source' && product.status === 'published');
+  return products.filter(product => product.status === 'published' && product.organization_id !== current?.membership.organization_id && product.audience_roles?.includes(current?.membership.role));
 }
 
 function buyerOwnResaleOffers() {
   return products.filter(product => product.organization_id === current?.membership.organization_id &&
-    product.sales_channel === 'resale');
+    product.sales_channel === sellerChannel(current?.membership.role));
 }
 
 function buyerOriginCounts() {
@@ -549,7 +607,7 @@ function renderBuyerMap() {
   buyerMap?.remove();
   buyerMap = null;
   const element = document.getElementById('buyer-map');
-  if (!element || current?.membership.role !== 'buyer' || buyerView !== 'explore' ||
+  if (!element || !hasPurchaseWorkspace() || buyerView !== 'explore' ||
       buyerGeoMode !== 'mixed' || productsLoading || productsError || !productsLoaded) return;
   try {
     buyerMap = mountBuyerOriginMap(element,buyerOriginCounts(),{
@@ -685,10 +743,11 @@ function buyerCartMarkup() {
   let canPrepare = true;
   let invalidStock = false;
   let invalidPrice = false;
+  let invalidWeight = false;
   const rows = lines.map(({product, id, quantity}) => {
     if (!product) {
       canPrepare = false;
-      return `<article class="buyer-cart-row buyer-cart-row--unavailable"><div><strong>${escapeHtml(t('buyerCartItemUnavailable'))}</strong><p dir="ltr">${escapeHtml(id)}</p></div><span>${quantity} ${escapeHtml(t('carton'))}</span><button type="button" class="secondary" data-buyer-remove-cart="${escapeHtml(id)}">${escapeHtml(t('remove'))}</button></article>`;
+      return `<article class="buyer-cart-row buyer-cart-row--unavailable"><div><strong>${escapeHtml(t('buyerCartItemUnavailable'))}</strong><p dir="ltr">${escapeHtml(id)}</p>      </div><span>${quantity} ${escapeHtml(t('carton'))}</span><button type="button" class="secondary" data-buyer-remove-cart="${escapeHtml(id)}" ${orderSubmitting?'disabled':''}>${escapeHtml(t('remove'))}</button></article>`;
     }
     const stock = Number(product.stock_cartons);
     const mills = buyerPriceMills(product.price_per_carton);
@@ -707,7 +766,10 @@ function buyerCartMarkup() {
     const weightMills = buyerWeightMills(product.net_weight_kg);
     const totalWeight = weightMills === null ? null : buyerMillsText(weightMills * BigInt(quantity));
     const amountText = amount === null ? null : buyerMillsText(amount);
-    if (weightMills === null) canPrepare = false;
+    if (weightMills === null || weightMills === 0n) {
+      canPrepare = false;
+      invalidWeight = true;
+    }
     const destination = product.price_term === 'CIF' ? (product.price_destination || t('destinationMissing')) : '';
     const quantityWarning = Number.isSafeInteger(stock) && quantity > stock
       ? `<p class="buyer-cart-warning" role="alert">${escapeHtml(t('buyerStockChanged'))}</p>` : '';
@@ -720,7 +782,7 @@ function buyerCartMarkup() {
         <small>${escapeHtml(formatMoney(product.price_per_carton,product.currency))} / ${escapeHtml(t('carton'))} · ${escapeHtml(formatPricePerKg(product.price_per_carton,product.net_weight_kg,product.currency))}</small>
         ${quantityWarning}
       </div>
-      <div class="buyer-stepper"><button type="button" data-buyer-quantity="${escapeHtml(id)}" data-buyer-delta="-1" aria-label="${escapeHtml(t('buyerRemoveCarton'))}">−</button><strong>${quantity}</strong><button type="button" data-buyer-quantity="${escapeHtml(id)}" data-buyer-delta="1" aria-label="${escapeHtml(t('buyerAddCarton'))}" ${quantity>=Number(product.stock_cartons)?'disabled':''}>+</button></div>
+      <div class="buyer-stepper"><button type="button" data-buyer-quantity="${escapeHtml(id)}" data-buyer-delta="-1" aria-label="${escapeHtml(t('buyerRemoveCarton'))}" ${orderSubmitting?'disabled':''}>−</button><strong>${quantity}</strong><button type="button" data-buyer-quantity="${escapeHtml(id)}" data-buyer-delta="1" aria-label="${escapeHtml(t('buyerAddCarton'))}" ${orderSubmitting||quantity>=Number(product.stock_cartons)?'disabled':''}>+</button></div>
       <strong>${escapeHtml(amountText === null ? '—' : formatMoney(amountText,product.currency))}</strong>
     </article>`;
   }).join('');
@@ -729,14 +791,15 @@ function buyerCartMarkup() {
     return `<strong dir="ltr">${escapeHtml(formatMoney(amount,currency))}</strong>`;
   }).join('');
   if (!totalMarkup) canPrepare = false;
-  const warning = invalidStock ? t('buyerStockChanged') : invalidPrice ? t('buyerInvalidPrice') : '';
+  const warning = invalidStock ? t('buyerStockChanged') : invalidPrice || invalidWeight ? t('buyerInvalidPrice') : '';
   return `<section class="buyer-panel"><div class="buyer-section-heading"><div><span class="buyer-brand">FRUIDGES · LIVE CATALOGUE</span><h2>🛒 ${escapeHtml(t('buyerCartTitle'))}</h2></div><span class="buyer-count">${buyerCartCount()}</span></div>
     <p>${escapeHtml(t('buyerCartHelp'))}</p><div class="buyer-cart-lines">${rows}</div>
     <div class="buyer-totals"><span>${escapeHtml(t('buyerCartTotals'))}</span>${totalMarkup}</div>
     ${warning ? `<p class="error" role="alert">${escapeHtml(warning)}</p>` : ''}
-    <button type="button" class="primary buyer-prepare-order" data-buyer-prepare-order ${canPrepare?'':'disabled'}>${escapeHtml(t('buyerPrepareDraft'))}</button>
+    <button type="button" class="primary buyer-prepare-order" data-buyer-submit-order ${canPrepare && !orderSubmitting?'':'disabled'}>${escapeHtml(t(orderSubmitting?'buyerOrderSubmitting':'buyerOrderSubmit'))}</button>
+    <button type="button" class="secondary buyer-prepare-order" data-buyer-prepare-order ${canPrepare && !orderSubmitting?'':'disabled'}>${escapeHtml(t('buyerPrepareDraft'))}</button>
     ${buyerDraftOrder ? buyerDraftMarkup() : ''}
-    <p class="notice">${escapeHtml(t('buyerOrdersUnavailable'))}</p></section>`;
+  </section>`;
 }
 
 function buyerPriceMills(value) {
@@ -799,6 +862,126 @@ function createBuyerDraftOrder() {
     lines,
     totals:[...totals].map(([currency,mills])=>({currency,amount:formatMoney(buyerMillsText(mills),currency)}))
   }};
+}
+
+function orderStatusLabel(status) {
+  const keys={
+    in_progress:'buyerOrderStatusInProgress',
+    confirmed:'buyerOrderStatusConfirmed',
+    rejected:'buyerOrderStatusRejected',
+    cancelled:'buyerOrderStatusCancelled'
+  };
+  return t(keys[status] || 'buyerOrderActionError');
+}
+
+function orderAmountMills(value) {
+  const match=/^(\d+)(?:\.(\d{1,3}))?$/.exec(String(value));
+  return match ? BigInt(match[1])*1000n+BigInt((match[2]||'').padEnd(3,'0')) : null;
+}
+
+function orderDate(value) {
+  const date=new Date(value);
+  return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString(language==='ar'?'ar':'en');
+}
+
+function orderActionMarkup(order) {
+  if (order.status!=='in_progress' || current?.membership.role==='admin') return '';
+  const membership=current?.membership;
+  const sellerRole=({source:'supplier',resale:'importer',distribution:'distributor'})[order.seller_channel];
+  const isSeller=membership?.organization_id===order.seller_organization_id && membership.role===sellerRole;
+  const isBuyer=membership?.organization_id===order.buyer_organization_id && membership.role===order.buyer_role;
+  const actions=isSeller
+    ? [['accept','buyerOrderAccept'],['reject','buyerOrderReject']]
+    : isBuyer ? [['cancel','buyerOrderCancel']] : [];
+  return actions.length ? `<div class="order-actions">${actions.map(([action,label])=>
+    `<button type="button" class="${action==='reject'||action==='cancel'?'secondary':''}" data-order-action="${action}" data-order-id="${escapeHtml(order.id)}" ${orderActionBusy===order.id?'disabled':''}>${escapeHtml(t(label))}</button>`
+  ).join('')}</div>` : '';
+}
+
+function orderMarkup(order) {
+  const totals=new Map();
+  for (const item of order.items||[]) {
+    const amount=orderAmountMills(item.line_total);
+    if (amount!==null && ['USD','KWD'].includes(item.currency))
+      totals.set(item.currency,(totals.get(item.currency)||0n)+amount);
+  }
+  const totalMarkup=[...totals].map(([currency,amount])=>
+    `<bdi dir="ltr">${escapeHtml(formatMoney(buyerMillsText(amount),currency))}</bdi>`
+  ).join(' · ') || '—';
+  const items=(order.items||[]).map(item=>{
+    const origin=String(item.origin_country||'').trim();
+    const term=`${item.price_term||''}${item.price_term==='CIF'&&item.price_destination?` · ${item.price_destination}`:''}`;
+    return `<li class="order-line">
+      <div><strong>${escapeHtml(language==='ar'?item.name_ar:item.name_en)}</strong>
+        <p><bdi dir="ltr">${escapeHtml(item.sku)}</bdi> · ${escapeHtml(origin?`${buyerCountryFlag(origin)} ${countryLabel(origin)}`:t('originMissing'))} · ${escapeHtml(item.packaging)}</p>
+        <p>${escapeHtml(String(item.cartons))} ${escapeHtml(t('carton'))} · ${escapeHtml(String(item.net_weight_kg))} kg / ${escapeHtml(t('carton'))}</p>
+        <p>${escapeHtml(term)}</p></div>
+      <div><p><bdi dir="ltr">${escapeHtml(formatMoney(item.unit_price,item.currency))}</bdi> / ${escapeHtml(t('carton'))}</p>
+        <strong><bdi dir="ltr">${escapeHtml(formatMoney(item.line_total,item.currency))}</bdi></strong></div>
+    </li>`;
+  }).join('');
+  return `<article class="order-card">
+    <header><h3><bdi dir="ltr">${escapeHtml(order.reference)}</bdi></h3><span class="order-status">${escapeHtml(orderStatusLabel(order.status))}</span></header>
+    <dl><div><dt>${escapeHtml(t('buyerOrderBuyer'))}</dt><dd>${escapeHtml(order.buyer_company_name)}</dd></div>
+      <div><dt>${escapeHtml(t('buyerOrderSeller'))}</dt><dd>${escapeHtml(order.seller_company_name)}</dd></div>
+      <div><dt>${escapeHtml(t('buyerOrderPlaced'))}</dt><dd>${escapeHtml(orderDate(order.created_at))}</dd></div>
+      <div><dt>${escapeHtml(t('buyerOrderTotals'))}</dt><dd>${totalMarkup}</dd></div></dl>
+    <h4>${escapeHtml(t('buyerOrderItems'))}</h4><ul class="order-lines">${items||`<li class="notice">${escapeHtml(t('buyerOrdersLoadError'))}</li>`}</ul>
+    ${orderActionMarkup(order)}
+  </article>`;
+}
+
+function orderListSection(title,orders,emptyText) {
+  return `<section class="order-list-section"><h3>${escapeHtml(t(title))}</h3>
+    ${orders.length?orders.map(orderMarkup).join(''):`<p class="notice">${escapeHtml(t(emptyText))}</p>`}</section>`;
+}
+
+function orderLoadState(emptyKey) {
+  if (ordersLoading || !ordersLoaded) return `<p class="notice" role="status">${escapeHtml(t('buyerOrdersLoading'))}</p>`;
+  if (ordersError) return `<p class="error" role="alert">${escapeHtml(t('buyerOrdersLoadError'))}</p>`;
+  return `<p class="notice">${escapeHtml(t(emptyKey))}</p>`;
+}
+
+function buyerOrdersMarkup() {
+  if (ordersLoading || !ordersLoaded || ordersError)
+    return `<section class="buyer-panel"><div class="catalog-heading"><h2>${escapeHtml(t('buyerOrders'))}</h2><button type="button" class="secondary" data-refresh-orders>${escapeHtml(t('refresh'))}</button></div>${orderLoadState('buyerOrdersBuyerEmpty')}</section>`;
+  const membership=current.membership;
+  const buyerOrders=purchaseOrders.filter(order=>order.buyer_organization_id===membership.organization_id);
+  const sellerOrders=purchaseOrders.filter(order=>order.seller_organization_id===membership.organization_id);
+  return `<section class="buyer-panel"><div class="catalog-heading"><h2>${escapeHtml(t('buyerOrders'))}</h2><button type="button" class="secondary" data-refresh-orders>${escapeHtml(t('refresh'))}</button></div>
+    ${orderListSection('buyerOrdersToSeller',buyerOrders,'buyerOrdersBuyerEmpty')}
+    ${sellerOrders.length || canManageSalesOffers()
+      ? orderListSection('buyerOrdersForSeller',sellerOrders,'buyerOrdersSellerEmpty') : ''}
+  </section>`;
+}
+
+function sellerOrdersMarkup() {
+  const orders=purchaseOrders.filter(order=>order.seller_organization_id===current?.membership.organization_id);
+  const content=ordersLoading || !ordersLoaded || ordersError
+    ? orderLoadState('buyerOrdersSellerEmpty')
+    : orders.length?orders.map(orderMarkup).join(''):`<p class="notice">${escapeHtml(t('buyerOrdersSellerEmpty'))}</p>`;
+  return `<section class="order-list-section"><div class="catalog-heading"><h3>${escapeHtml(t('buyerOrdersForSeller'))}</h3><button type="button" class="secondary" data-refresh-orders>${escapeHtml(t('refresh'))}</button></div>${content}</section>`;
+}
+
+function adminOrdersMarkup() {
+  if (ordersLoading || !ordersLoaded || ordersError) return orderLoadState('adminOrdersEmpty');
+  return purchaseOrders.length
+    ? purchaseOrders.map(orderMarkup).join('')
+    : `<p class="notice">${escapeHtml(t('adminOrdersEmpty'))}</p>`;
+}
+
+function renderOrderSurfaces() {
+  if (!current) return;
+  if (current.membership.role==='admin' && activeAdminView==='orders') {
+    const panel=document.getElementById('admin-orders');
+    if (panel) panel.innerHTML=adminOrdersMarkup();
+  } else if (hasPurchaseWorkspace() && buyerView==='orders') {
+    const content=document.getElementById('buyer-content');
+    if (content) content.innerHTML=buyerOrdersMarkup();
+  } else if (current.membership.role==='supplier') {
+    const panel=document.getElementById('seller-orders');
+    if (panel) panel.innerHTML=sellerOrdersMarkup();
+  }
 }
 
 function buyerDraftMarkup() {
@@ -872,8 +1055,8 @@ function buyerResaleContent() {
 
 function buyerPageContent() {
   if (buyerView === 'cart') return buyerCartMarkup();
-  if (buyerView === 'orders') return `<section class="buyer-panel"><h2>${escapeHtml(t('buyerOrders'))}</h2><p class="notice">${escapeHtml(t('buyerOrdersUnavailable'))}</p></section>`;
-  if (buyerView === 'resale') return buyerResaleContent();
+  if (buyerView === 'orders') return buyerOrdersMarkup();
+  if (buyerView === 'resale' && canManageSalesOffers()) return buyerResaleContent();
   if (buyerView === 'catalog') return buyerCatalogMarkup();
   return buyerExploreContent();
 }
@@ -890,19 +1073,23 @@ function updateBuyerCartChrome() {
   }
 }
 
+function buyerNavigation() {
+  const nav = [['explore','buyerExplorer'],['catalog','buyerCatalog']];
+  if (canManageSalesOffers()) nav.push(['resale','buyerResale']);
+  nav.push(['cart','buyerCart'],['orders','buyerOrders']);
+  return nav;
+}
+
 function buyerWorkspace() {
-  const nav = [
-    ['explore','buyerExplorer'],['catalog','buyerCatalog'],['resale','buyerResale'],
-    ['cart','buyerCart'],['orders','buyerOrders']
-  ];
+  const nav = buyerNavigation();
   return `<div class="buyer-layout">
-    <aside class="buyer-nav" aria-label="${escapeHtml(t('buyerRole'))}">
-      <h2>${escapeHtml(t('buyerRole'))}</h2>
+    <aside class="buyer-nav" aria-label="${escapeHtml(t(current?.membership.role || 'importer'))}">
+      <h2>${escapeHtml(t(current?.membership.role || 'importer'))}</h2>
       ${nav.map(([id,label]) => `<button type="button" data-buyer-view="${id}" ${buyerView===id?'aria-current="page"':''}>${escapeHtml(t(label))}${id==='cart'?` <span class="buyer-nav-count" id="buyer-nav-cart-count" aria-live="polite">${buyerCartCount()}</span>`:''}</button>`).join('')}
     </aside>
     <section class="buyer-main">
       <div class="buyer-toptools">
-        <span>${escapeHtml(t('buyerRole'))}</span>
+        <span>${escapeHtml(t(current?.membership.role || 'importer'))}</span>
         <p id="message" role="status"></p>
         <div>
           <button type="button" data-buyer-view="orders">📦 ${escapeHtml(t('buyerOrders'))}</button>
@@ -919,7 +1106,7 @@ function buyerWorkspace() {
 
 function renderBuyerContent() {
   const content = document.getElementById('buyer-content');
-  if (!content || current?.membership.role !== 'buyer') return;
+  if (!content || !hasPurchaseWorkspace()) return;
   buyerMap?.remove();
   buyerMap = null;
   content.innerHTML = buyerPageContent();
@@ -943,7 +1130,7 @@ function catalogState() {
 }
 
 function productForm() {
-  if (!['supplier', 'buyer', 'admin'].includes(current.membership.role)) return '';
+  if (!['supplier', 'importer', 'distributor', 'admin'].includes(current.membership.role)) return '';
   return `<div id="excel-import-host"></div><section class="catalog-form">
     <button type="button" data-product-form-toggle aria-controls="product-form-body" aria-expanded="${productFormOpen}">${escapeHtml(t(productFormOpen?'closeProductForm':'openProductForm'))}</button>
     <div id="product-form-body" ${productFormOpen?'':'hidden'}>
@@ -953,6 +1140,7 @@ function productForm() {
       <input id="product-image" name="image" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="image-hint">
       <p id="image-hint">${escapeHtml(t('imageHint'))}</p>
       ${current.membership.role === 'admin' ? `<label for="product-owner">${escapeHtml(t('productOwner'))}</label><select id="product-owner" name="product_owner" required>${productOwnerOptions()}</select><p id="owner-state" role="status">${directoryError ? escapeHtml(t('directoryError')) : ''}</p><button id="reload-owners" type="button" class="secondary">${escapeHtml(t('refreshDirectory'))}</button>` : ''}
+      ${current.membership.role === 'admin' ? `<fieldset class="product-audience" aria-describedby="product-audience-hint"><legend>${escapeHtml(t('productAudience'))}</legend><p id="product-audience-hint">${escapeHtml(t('productAudienceHint'))}</p><div class="product-audience-options">${audienceRoles.map(role=>`<label><input type="checkbox" name="audience" value="${role}"> ${escapeHtml(marketRoleLabels[language][role])}</label>`).join('')}</div></fieldset>` : ''}
       <label for="product-sku">${escapeHtml(t('sku'))}</label>
       <input id="product-sku" name="sku" maxlength="80" required>
       <label for="product-name-en">${escapeHtml(t('nameEn'))}</label>
@@ -1013,8 +1201,8 @@ function adminUsersForm() {
       <label for="user-role">${escapeHtml(t('userRole'))}</label>
       <select id="user-role" name="role" required>
         <option value="supplier">${escapeHtml(t('supplier'))}</option>
-        <option value="buyer">${escapeHtml(t('buyerRole'))}</option>
-        <option value="restaurant">${escapeHtml(t('restaurant'))}</option>
+        <option value="importer">${escapeHtml(t('importer'))}</option><option value="distributor">${escapeHtml(t('distributor'))}</option>
+        <option value="horeca">${escapeHtml(t('horeca'))}</option>
         <option value="admin">${escapeHtml(t('admin'))}</option>
       </select>
       <p id="create-user-message" role="status" aria-live="polite"></p>
@@ -1035,6 +1223,7 @@ const adminViews = [
   ['overview', 'adminOverview'],
   ['suppliers', 'adminSuppliers'],
   ['buyers', 'adminBuyers'],
+  ['distributors','adminDistributors'],
   ['restaurants', 'adminRestaurants'],
   ['products', 'adminProducts'],
   ['accounts', 'adminAccounts'],
@@ -1061,7 +1250,7 @@ function adminStatsMarkup() {
 }
 
 function adminDirectoryRole(view) {
-  return ({ suppliers: 'supplier', buyers: 'buyer', restaurants: 'restaurant' })[view] || '';
+  return ({ suppliers: 'supplier', buyers: 'importer', distributors:'distributor', restaurants: 'horeca' })[view] || '';
 }
 
 function companyCountryLabel(code) {
@@ -1069,7 +1258,7 @@ function companyCountryLabel(code) {
 }
 
 function companyProductsFor(organization, role) {
-  const expectedChannel = role === 'supplier' ? 'source' : role === 'buyer' ? 'resale' : '';
+  const expectedChannel = sellerChannel(role);
   const ownedProducts = products.filter(product => product.organization_id === organization.id);
   const companyProducts = expectedChannel
     ? ownedProducts.filter(product => product.sales_channel === expectedChannel)
@@ -1101,7 +1290,7 @@ function companyDirectoryCard(organization, role) {
   const countryId = `company-country-${organization.id}`;
   const statusId = `country-status-${organization.id}`;
   const roleLabel = role === 'supplier' ? 'adminSuppliers'
-    : role === 'buyer' ? 'adminBuyers' : 'adminRestaurants';
+    : role === 'importer' ? 'adminBuyers' : role === 'distributor' ? 'adminDistributors' : 'adminRestaurants';
   const productSet = companyProductsFor(organization, role);
   return `<article class="company-card">
     <div class="company-card__heading">
@@ -1174,7 +1363,10 @@ function adminPanel() {
     return `<div id="admin-user-directory"></div>`;
   }
   if (activeAdminView === 'orders') {
-    return `<section class="card module-empty"><p class="notice">${escapeHtml(t('adminOrdersUnavailable'))}</p></section>`;
+    return `<section class="card order-section">
+      <div class="catalog-heading"><p>${escapeHtml(t('adminOrdersUnavailable'))}</p><button type="button" class="secondary" data-refresh-orders>${escapeHtml(t('refresh'))}</button></div>
+      <div id="admin-orders">${adminOrdersMarkup()}</div>
+    </section>`;
   }
   if (activeAdminView === 'analytics') {
     return `<p class="notice">${escapeHtml(t('adminAnalyticsNote'))}</p>${adminCatalogueError()}${adminStatsMarkup()}`;
@@ -1264,10 +1456,10 @@ function show(message = '') {
   buyerMap?.remove();
   buyerMap = null;
   root.classList.toggle('wide', Boolean(current));
-  root.classList.toggle('buyer-page', Boolean(current?.membership.role === 'buyer'));
+  root.classList.toggle('buyer-page', Boolean(hasPurchaseWorkspace()));
   root.innerHTML = current
     ? current.membership.role === 'admin' ? adminWorkspace()
-    : current.membership.role === 'buyer' ? buyerWorkspace()
+    : hasPurchaseWorkspace() ? buyerWorkspace()
     : `<section class="card workspace-card">
         <p class="eyebrow">Fruidges</p><h1>${escapeHtml(t(current.membership.role))}</h1>
         <p>${escapeHtml(t('ready'))}</p><p id="message" role="status"></p>
@@ -1276,6 +1468,10 @@ function show(message = '') {
           <button class="secondary" id="logout">${escapeHtml(t('logout'))}</button>
         </div>
       </section>
+      ${current.membership.role === 'supplier' ? `<section class="card order-section">
+        <div class="catalog-heading"><h2>${escapeHtml(t('buyerOrdersForSeller'))}</h2><button type="button" class="secondary" data-refresh-orders>${escapeHtml(t('refresh'))}</button></div>
+        <div id="seller-orders">${sellerOrdersMarkup()}</div>
+      </section>` : ''}
       <section class="card catalog-card">
         <div class="catalog-heading">
           <h2>${escapeHtml(t('catalogTitle'))}</h2>
@@ -1318,6 +1514,7 @@ function show(message = '') {
       busy = false;
       show();
       await loadProducts();
+      await loadOrders();
     } catch (error) {
       if (revision !== requestRevision) return;
       current = null;
@@ -1395,7 +1592,7 @@ async function loadProducts() {
 }
 
 function validDirectoryResponse(data) {
-  const roles = ['supplier', 'buyer', 'restaurant', 'admin'];
+  const roles = ['supplier', 'importer', 'distributor', 'horeca', 'admin'];
   const statuses = ['total', 'active', 'pending', 'suspended'];
   return Array.isArray(data?.organizations) && data.organizations.every(organization =>
     organization && typeof organization.id === 'string' &&
@@ -1405,6 +1602,141 @@ function validDirectoryResponse(data) {
     roles.every(role => organization.membership_counts[role] &&
       statuses.every(status => Number.isInteger(organization.membership_counts[role][status]) &&
         organization.membership_counts[role][status] >= 0)));
+}
+
+async function loadOrders(force = false) {
+  if (!current || (ordersLoading && !force)) return;
+  const requestRevision=revision;
+  const requestId=++orderLoadRequest;
+  ordersLoading=true;
+  ordersError='';
+  renderOrderSurfaces();
+  try {
+    const {data,error}=await client.from('fruidges_orders')
+      .select('id,reference,buyer_organization_id,buyer_role,seller_organization_id,seller_channel,buyer_company_name,seller_company_name,status,created_at')
+      .order('created_at',{ascending:false});
+    if (requestRevision!==revision || requestId!==orderLoadRequest || !current) return;
+    if (error || !Array.isArray(data)) throw new Error('orders_query_failed');
+    let items=[];
+    if (data.length) {
+      const {data:itemRows,error:itemError}=await client.from('fruidges_order_items')
+        .select('order_id,sku,name_en,name_ar,origin_country,packaging,net_weight_kg,cartons,unit_price,currency,price_term,price_destination,line_total,created_at')
+        .in('order_id',data.map(order=>order.id))
+        .order('created_at',{ascending:true});
+      if (requestRevision!==revision || requestId!==orderLoadRequest || !current) return;
+      if (itemError || !Array.isArray(itemRows)) throw new Error('order_items_query_failed');
+      items=itemRows;
+    }
+    purchaseOrders=data.map(order=>({...order,items:items.filter(item=>item.order_id===order.id)}));
+    ordersLoaded=true;
+  } catch {
+    if (requestRevision!==revision || requestId!==orderLoadRequest || !current) return;
+    purchaseOrders=[];
+    ordersLoaded=true;
+    ordersError='buyerOrdersLoadError';
+  } finally {
+    if (requestRevision===revision && requestId===orderLoadRequest && current) {
+      ordersLoading=false;
+      renderOrderSurfaces();
+    }
+  }
+}
+
+function checkoutErrorKey(error) {
+  const detail=String(error?.message||'').toLowerCase();
+  if (detail.includes('stock_changed')) return 'buyerStockChanged';
+  if (detail.includes('offer_unavailable')) return 'buyerOrderOfferUnavailable';
+  if (detail.includes('buyer_required') || detail.includes('invalid_cart') || detail.includes('duplicate_cart_item')) return 'buyerInvalidCart';
+  if (error?.code==='PGRST202' || error?.code==='42P01' || detail.includes('schema cache') || detail.includes('does not exist'))
+    return 'buyerOrderServiceUnavailable';
+  return 'buyerOrderSubmitError';
+}
+
+async function submitBuyerOrder() {
+  if (orderSubmitting || !hasPurchaseWorkspace()) return;
+  const items=[];
+  for (const [id,rawQuantity] of Object.entries(buyerQuantity)) {
+    const cartons=Number(rawQuantity);
+    if (!Number.isSafeInteger(cartons) || cartons<1) continue;
+    const product=buyerOffers().find(row=>String(row.id)===id);
+    if (!product || !Number.isSafeInteger(Number(product.stock_cartons)) || cartons>Number(product.stock_cartons)) {
+      setBuyerStatus(product?'buyerStockChanged':'buyerInvalidCart');
+      return;
+    }
+    const priceMills=buyerPriceMills(product.price_per_carton);
+    const weightMills=buyerWeightMills(product.net_weight_kg);
+    if (priceMills===null || !['USD','KWD'].includes(product.currency) ||
+        weightMills===null || weightMills===0n) {
+      setBuyerStatus('buyerInvalidPrice');
+      return;
+    }
+    items.push({product_id:id,cartons});
+  }
+  if (!items.length) {setBuyerStatus('buyerInvalidCart');return;}
+  try {
+    if (!buyerCheckoutKey) buyerCheckoutKey=crypto.randomUUID();
+  } catch {
+    setBuyerStatus('buyerOrderSubmitError');
+    return;
+  }
+  const requestRevision=revision;
+  orderSubmitting=true;
+  renderBuyerContent();
+  try {
+    const {data,error}=await client.rpc('fruidges_create_orders',{
+      p_buyer_organization:current.membership.organization_id,
+      p_buyer_role:current.membership.role,
+      p_items:items,
+      p_idempotency_key:buyerCheckoutKey
+    });
+    if (requestRevision!==revision || !current) return;
+    if (error) throw error;
+    if (!Array.isArray(data) || !data.length) throw new Error('invalid_order_response');
+    buyerQuantity={};
+    buyerDraftOrder=null;
+    buyerCheckoutKey='';
+    buyerView='orders';
+    ordersLoaded=false;
+    orderSubmitting=false;
+    renderBuyerContent();
+    await Promise.all([loadProducts(),loadOrders(true)]);
+    const status=document.getElementById('message');
+    const references=data.map(order=>order.reference).filter(Boolean).join(', ');
+    if (status) status.textContent=`${t('buyerOrderCreated')}${references?` ${references}`:''}`;
+  } catch (error) {
+    if (requestRevision!==revision || !current) return;
+    if (String(error?.message||'').toLowerCase().includes('idempotency_conflict')) buyerCheckoutKey='';
+    orderSubmitting=false;
+    renderBuyerContent();
+    setBuyerStatus(checkoutErrorKey(error));
+  } finally {
+    if (requestRevision===revision && current) orderSubmitting=false;
+  }
+}
+
+async function respondToOrder(orderId,action) {
+  if (!current || orderActionBusy || !orderId || !['accept','reject','cancel'].includes(action)) return;
+  const requestRevision=revision;
+  orderActionBusy=orderId;
+  renderOrderSurfaces();
+  try {
+    const {error}=await client.rpc('fruidges_respond_to_order',{p_order:orderId,p_action:action});
+    if (requestRevision!==revision || !current) return;
+    if (error) throw error;
+    await Promise.all([loadOrders(true),action==='accept'?Promise.resolve():loadProducts()]);
+    if (requestRevision!==revision || !current) return;
+    const status=document.getElementById('message');
+    if (status) status.textContent=t('buyerOrderUpdated');
+  } catch {
+    if (requestRevision!==revision || !current) return;
+    const status=document.getElementById('message');
+    if (status) status.textContent=t('buyerOrderActionError');
+  } finally {
+    if (requestRevision===revision && current) {
+      orderActionBusy='';
+      renderOrderSurfaces();
+    }
+  }
 }
 
 async function loadAdminDirectory(force = false) {
@@ -1521,9 +1853,13 @@ async function saveProduct(event) {
   }
   const owner=current.membership.role==='admin' ? productOwners().find(o=>o.key===form.get('product_owner')) : null;
   if(current.membership.role==='admin' && !owner){busy=false;submit.disabled=false;submit.textContent=t('add');message.textContent=t('ownerRequired');return;}
+  const isAdmin=current.membership.role==='admin';
+  const submittedAudience=isAdmin ? new Set(form.getAll('audience').map(String)) : null;
+  const selectedAudience=isAdmin ? audienceRoles.filter(role=>submittedAudience.has(role)) : [];
+  if(isAdmin && !selectedAudience.length){busy=false;submit.disabled=false;submit.textContent=t('add');message.textContent=t('audienceRequired');return;}
   const payload = {
     organization_id: owner ? owner.id : current.membership.organization_id,
-    sales_channel: owner ? owner.channel : current.membership.role === 'buyer' ? 'resale' : 'source',
+    sales_channel: owner ? owner.channel : sellerChannel(current.membership.role),
     sku: String(form.get('sku')).trim(),
     name_en: String(form.get('name_en')).trim(),
     name_ar: String(form.get('name_ar')).trim(),
@@ -1541,6 +1877,7 @@ async function saveProduct(event) {
     photo_status: 'missing',
     status: String(form.get('status'))
   };
+  if(isAdmin){payload.audience_roles=selectedAudience;payload.audience_override=true;}
   try { Object.assign(payload,fxFields(form,payload.currency)); } catch {busy=false;submit.disabled=false;submit.textContent=t('add');message.textContent=t('fxInvalid');return;}
   try {
     const imagePath = await uploadImage(client, imageFile, payload.organization_id);
@@ -1663,6 +2000,7 @@ async function setPassword(event) {
     busy = false;
     show(t('passwordSaved'));
     await loadProducts();
+    await loadOrders();
   } catch {
     if (revision !== requestRevision) return;
     busy = false;
@@ -1671,7 +2009,7 @@ async function setPassword(event) {
 }
 
 function renderCatalog() {
-  if (current?.membership.role === 'buyer') {
+  if (hasPurchaseWorkspace()) {
     if (buyerView === 'resale') {
       const catalog = document.getElementById('catalog');
       if (catalog) catalog.innerHTML = buyerOwnResaleMarkup();
@@ -1702,6 +2040,7 @@ async function recheck() {
       // A routine refresh must not erase forms the user is filling in.
       if (changed) show();
       await loadProducts();
+      await loadOrders();
     }
   } catch (error) {
     if (revision !== requestRevision) return;
@@ -1726,17 +2065,46 @@ document.getElementById('language').addEventListener('click', () => {
   language = language === 'en' ? 'ar' : 'en';
   show();
 });
-client.auth.onAuthStateChange(event => {
+async function restoreStoredSession(stamp) {
+  try {
+    if (stamp !== revision) return;
+    const account = await resolveMembership(client);
+    if (stamp !== revision) return;
+    current = account;
+    busy = false;
+    show();
+    await loadProducts();
+    await loadOrders();
+  } catch (error) {
+    if (stamp !== revision) return;
+    current = null;
+    clearWorkspace();
+    busy = false;
+    show(t(error.code || 'network'));
+  }
+}
+client.auth.onAuthStateChange((event, session) => {
   if ((event === 'SIGNED_IN' || event === 'PASSWORD_RECOVERY') && passwordSetup) {
     passwordSetupReady = true;
     show();
   }
-  if (event === 'SIGNED_OUT' && (current || passwordSetupReady)) {
+  if (!passwordSetup && session && (event === 'INITIAL_SESSION' ||
+      (event === 'SIGNED_IN' && !busy && current?.user.id !== session.user.id))) {
+    const stamp = ++revision;
+    current = null;
+    clearWorkspace();
+    busy = true;
+    show(t('busy'));
+    // Leave the Auth callback before requesting another Auth operation.
+    setTimeout(() => restoreStoredSession(stamp), 0);
+  }
+  if (event === 'SIGNED_OUT') {
     ++revision;
     current = null;
     clearWorkspace();
     passwordSetup = false;
     passwordSetupReady = false;
+    busy = false;
     show(t('session'));
   }
 });
@@ -1748,9 +2116,9 @@ show();
 
 function canPublish(product) {
   const m=current?.membership;
-  return Boolean(m && product.status==='draft' && ['source','resale'].includes(product.sales_channel) &&
+  return Boolean(m && product.status==='draft' && ['source','resale','distribution'].includes(product.sales_channel) &&
     (m.role==='admin' || (m.organization_id===product.organization_id &&
-      ((m.role==='supplier' && product.sales_channel==='source') || (m.role==='buyer' && product.sales_channel==='resale')))));
+      (sellerRoles.includes(m.role) && product.sales_channel===sellerChannel(m.role)))));
 }
 async function publishProduct(event) {
   const button=event.target.closest('[data-publish]');
@@ -1776,8 +2144,8 @@ async function publishProduct(event) {
 }
 
 function productOwners(){
- return organizations.flatMap(o=>['supplier','buyer'].filter(role=>o.membership_counts[role]?.active>0)
- .map(role=>({id:o.id,key:o.id+':'+role,name:o.name,role,channel:role==='supplier'?'source':'resale'})));
+ return organizations.flatMap(o=>['supplier','importer','distributor'].filter(role=>o.membership_counts[role]?.active>0)
+ .map(role=>({id:o.id,key:o.id+':'+role,name:o.name,role,channel:sellerChannel(role)})));
 }
 function productOwnerOptions(){
  return `<option value="">${escapeHtml(t('chooseOwner'))}</option>`+productOwners().map(o=>
@@ -1800,12 +2168,13 @@ function openProductDetails(id,trigger){
  root.insertAdjacentHTML('beforeend',`<dialog id="product-details-dialog" class="product-dialog" aria-labelledby="product-dialog-title">
  <div class="product-dialog-heading"><h2 id="product-dialog-title">${escapeHtml(language==='ar'?product.name_ar:product.name_en)}</h2><button type="button" class="secondary" data-close-details autofocus>${escapeHtml(t('closeDetails'))}</button></div>
  <p>${escapeHtml(t('productOwner'))}: ${escapeHtml(company?.name||t('ownerUnknown'))}</p>
- <div data-dialog-product>${productCard(product,{showAudience:true})}</div></dialog>`);
+ <div data-dialog-product>${productCard(product,{showAudience:true})}</div>${visibilityForm(product)}</dialog>`);
  const dialog=document.getElementById('product-details-dialog');
  dialog.querySelector('[data-close-details]').addEventListener('click',()=>dialog.close());
  dialog.querySelector('[data-dialog-product]').addEventListener('click',publishProduct);
  dialog.addEventListener('close',()=>{dialog.remove();if(trigger.isConnected)trigger.focus();else document.getElementById('refresh-catalog')?.focus();});
  dialog.addEventListener('click',event=>{if(event.target===dialog){const r=dialog.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)dialog.close();}});
+ bindVisibility(dialog,product);
  dialog.showModal();
 }
 
@@ -1820,8 +2189,32 @@ function productPagination(){
 
 function setupExcelImport(){
  const host=document.getElementById('excel-import-host');
- if(!host?.querySelector||!current||!['admin','supplier','buyer'].includes(current.membership.role))return;
+ if(!host?.querySelector||!current||!['admin','supplier','importer','distributor'].includes(current.membership.role))return;
  const account=current,stamp=revision;
- const owners=account.membership.role==='admin'?productOwners():[{id:account.membership.organization_id,name:account.user.email||t(account.membership.role),channel:account.membership.role==='supplier'?'source':'resale'}];
- mountExcelImport(host,client,language,owners,()=>revision===stamp&&current===account,()=>{productPage=0;loadProducts();});
+ const owners=account.membership.role==='admin'?productOwners():[{id:account.membership.organization_id,name:account.user.email||t(account.membership.role),channel:sellerChannel(account.membership.role)}];
+ mountExcelImport(host,client,language,owners,()=>revision===stamp&&current===account,()=>{productPage=0;loadProducts();},account.membership.role==='admin'?audienceRoles:[]);
+}
+
+function hasPurchaseWorkspace(){return ['importer','distributor','horeca'].includes(current?.membership.role);}
+function canManageSalesOffers(){return ['importer','distributor'].includes(current?.membership.role);}
+function sellerChannel(role){return ({supplier:'source',importer:'resale',distributor:'distribution'})[role]||'';}
+function visibilityForm(product){
+ if(current?.membership.role!=='admin')return '';
+ return `<form data-visibility><fieldset><legend>${escapeHtml(t('visibilityTitle'))}</legend>${audienceRoles.map(role=>`<label><input type="checkbox" name="audience" value="${role}" ${product.audience_roles?.includes(role)?'checked':''}> ${escapeHtml(marketRoleLabels[language][role])}</label>`).join('')}</fieldset><button>${escapeHtml(t('visibilitySave'))}</button><button type="button" data-default-audience class="secondary">${escapeHtml(t('visibilityDefault'))}</button><p data-visibility-status role="status"></p></form>`;
+}
+function bindVisibility(dialog,product){
+ const form=dialog.querySelector('[data-visibility]');if(!form)return;
+ const stamp=revision;let saving=false;
+ async function save(roles){
+  if(saving||stamp!==revision||current?.membership.role!=='admin')return;
+  const status=form.querySelector('[data-visibility-status]');
+  if(roles&&roles.length===0){status.textContent=t('visibilityError');return;}
+  saving=true;for(const b of form.querySelectorAll('button'))b.disabled=true;
+  try{const {error}=await client.rpc('fruidges_admin_set_product_audience',{p_product:product.id,p_roles:roles});
+   if(stamp!==revision)return;if(error)throw Error();await loadProducts();dialog.close();
+  }catch{if(stamp===revision)status.textContent=t('visibilityError');}
+  finally{saving=false;for(const b of form.querySelectorAll('button'))b.disabled=false;}
+ }
+ form.addEventListener('submit',e=>{e.preventDefault();save(new FormData(form).getAll('audience'));});
+ form.querySelector('[data-default-audience]').onclick=()=>save(null);
 }

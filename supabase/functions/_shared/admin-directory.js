@@ -1,4 +1,4 @@
-const roles = ['supplier', 'buyer', 'restaurant', 'admin'];
+const roles = ['supplier', 'importer', 'distributor', 'horeca', 'admin'];
 const statuses = ['active', 'pending', 'suspended'];
 
 export function buildOrganizationDirectory(organizations, memberships) {
@@ -30,7 +30,7 @@ export function buildOrganizationDirectory(organizations, memberships) {
   for (const membership of memberships) {
     const organization = directory.get(membership.organization_id);
     if (!organization) throw new Error('directory_invalid');
-    const role = membership.role === 'wholesaler' ? 'buyer' : membership.role;
+    const role = membership.role;
     if (!roles.includes(role) || !statuses.includes(membership.status)) {
       throw new Error('directory_invalid');
     }
@@ -41,6 +41,6 @@ export function buildOrganizationDirectory(organizations, memberships) {
   }
 
   return [...directory.values()].filter(organization =>
-    ['supplier', 'buyer', 'restaurant'].some(role =>
+    ['supplier', 'importer', 'distributor', 'horeca'].some(role =>
       organization.membership_counts[role].total > 0));
 }

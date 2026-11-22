@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {DOMParser} from '@xmldom/xmldom';
 import {zipSync,strToU8} from 'fflate';
-import {readOrderWorkbook,prepareProducts} from '../src/excel-import.js';
+import {readOrderWorkbook,prepareProducts,mountExcelImport} from '../src/excel-import.js';
 import {formatMoney,formatConverted,fxFields} from '../src/catalog-format.js';
 globalThis.DOMParser=DOMParser;
 const headers={C:'Category',D:'Photos',E:'Product',F:'Arabic desgnation',G:'Size/pack',H:'Net box Weight (Kg)',I:'Price CIF KWI (USD/BOX)',J:'Landed Cost (KD/Box)',K:'Landed Cost (KD/Kg)',L:'Order Box',M:'Order weight',N:'Amount ($)'};
@@ -11,10 +11,27 @@ const rows=readOrderWorkbook(zipSync({'xl/worksheets/sheet1.xml':strToU8(sheet)}
 assert.equal(rows.length,1);assert.equal(rows[0].currency,'USD');
 assert.doesNotMatch(JSON.stringify(rows[0]),/999999|99999|admin|danger/);
 const owner={id:'organization-a',channel:'source'};
+const mountImport=(audience=[])=>{
+ const elements=new Map();
+ const host={innerHTML:'',isConnected:true,querySelector(selector){
+  if(!elements.has(selector))elements.set(selector,{addEventListener(){},hidden:false});
+  return elements.get(selector);
+ }};
+ mountExcelImport(host,{},'en',[owner],()=>true,()=>{},audience);
+ return host.innerHTML;
+};
+assert.match(mountImport(['importer','horeca']),/name="audience" value="horeca"/,
+ 'admin Excel imports expose audience choices');
+assert.doesNotMatch(mountImport(),/name="audience"/,'non-admin Excel imports retain default routing');
 const readyRows=rows.map(row=>({...row,stock_cartons:'7'}));
 const products=await prepareProducts(readyRows,owner,'AU');
 assert.equal(products[0].stock_cartons,7);assert.equal(products[0].price_per_carton,'85');assert.equal(products[0].status,'draft');
 assert.equal(products[0].photo_status,'missing');
+const directedProducts=await prepareProducts(readyRows,owner,'AU',['horeca','importer','horeca']);
+assert.deepEqual(directedProducts[0].audience_roles,['importer','horeca']);
+assert.equal(directedProducts[0].audience_override,true,'admin imports can carry an explicit audience override');
+await assert.rejects(()=>prepareProducts(readyRows,owner,'AU',[]),/invalid_audience/);
+await assert.rejects(()=>prepareProducts(readyRows,owner,'AU',['admin']),/invalid_audience/);
 await assert.rejects(()=>prepareProducts(readyRows.map(row=>({...row,currency:'AUD'})),owner,'AU'),/currency:AUD/);
 assert.equal((await prepareProducts(readyRows,owner,'AU'))[0].sku,products[0].sku);
 await assert.rejects(()=>prepareProducts([...readyRows,...readyRows],owner,'AU'),/duplicate/);
