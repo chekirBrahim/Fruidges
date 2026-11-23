@@ -100,6 +100,7 @@ const text = {
     network:'Unable to reach the service. Please try again.',
     ready:'Your account has been verified.', refresh:'Check access again',
     local:'You are signed out locally. Server sign-out could not be confirmed.',
+    userIdentity:'Signed-in account',userName:'Name',userNameUnavailable:'Name unavailable',
     supplier:'Supplier workspace', buyer:'Buyer / Wholesaler workspace',
     buyerRole:'Buyer / Wholesaler', restaurant:'Restaurant workspace',
     admin:'Administrator workspace', catalogTitle:'Product catalogue',
@@ -245,6 +246,7 @@ const text = {
     network:'تعذر الاتصال بالخدمة. حاول مجدداً.',
     ready:'تم التحقق من حسابك.', refresh:'التحقق من الوصول مجدداً',
     local:'تم تسجيل الخروج محلياً. تعذر تأكيد تسجيل الخروج من الخادم.',
+    userIdentity:'الحساب المسجل',userName:'الاسم',userNameUnavailable:'الاسم غير متاح',
     supplier:'مساحة المورد', buyer:'مساحة المشتري وتاجر الجملة',
     buyerRole:'المشتري / تاجر الجملة', restaurant:'مساحة المطعم',
     admin:'مساحة المسؤول', catalogTitle:'كتالوج المنتجات',
@@ -394,6 +396,23 @@ function membershipContext(account) {
 
 const root = document.getElementById('root');
 const t = key => text[language][key] || text[language].network;
+
+function workspaceIdentityMarkup() {
+  const user=current?.user;
+  const metadata=user?.user_metadata||{};
+  const nameParts=[metadata.first_name,metadata.last_name]
+    .filter(value=>typeof value==='string'&&value.trim())
+    .map(value=>value.trim());
+  const metadataName=[nameParts.join(' '),metadata.full_name,metadata.name,metadata.display_name]
+    .find(value=>typeof value==='string'&&value.trim());
+  const name=metadataName||user?.email||t('userNameUnavailable');
+  const role=current?.membership?.role;
+  if(!role)return '';
+  return `<div class="workspace-identity" aria-label="${escapeHtml(t('userIdentity'))}">
+    <span><small>${escapeHtml(t('userRole'))}</small><strong>${escapeHtml(t(role))}</strong></span>
+    <span><small>${escapeHtml(t('userName'))}</small><bdi dir="auto">${escapeHtml(name)}</bdi></span>
+  </div>`;
+}
 
 root.addEventListener('click', event => {
   const buyerNav = event.target.closest('[data-buyer-view]');
@@ -607,7 +626,7 @@ function renderBuyerMap() {
   buyerMap?.remove();
   buyerMap = null;
   const element = document.getElementById('buyer-map');
-  if (!element || !hasPurchaseWorkspace() || buyerView !== 'explore' ||
+  if (!element || current?.membership.role==='horeca' || !hasPurchaseWorkspace() || buyerView !== 'explore' ||
       buyerGeoMode !== 'mixed' || productsLoading || productsError || !productsLoaded) return;
   try {
     buyerMap = mountBuyerOriginMap(element,buyerOriginCounts(),{
@@ -716,18 +735,19 @@ function buyerExploreContent() {
     <span><b>${escapeHtml(countryLabel(code).slice(buyerCountryFlag(code).length + 1))}</b><small>${count} ${escapeHtml(t('buyerProducts'))}</small></span>
     <strong>${count}</strong>
   </button>`).join('');
+  const isHoreca=current?.membership.role==='horeca';
   return `<section class="buyer-hero">
       <div><span>FRUIDGES · GLOBAL SOURCING</span><h1>${escapeHtml(t('buyerWelcome'))}</h1><p>${escapeHtml(t('buyerWelcomeSub'))}</p></div><strong aria-hidden="true">🌍</strong>
     </section>
     <section class="buyer-geo-panel">
       <div class="buyer-geo-heading"><div><span class="buyer-brand">LIVE PRODUCT DATA</span><h2>🌍 ${escapeHtml(t('buyerOriginTitle'))}</h2><p>${escapeHtml(t('buyerOriginDescription'))}</p></div>
-        <div class="buyer-geo-modes" role="group" aria-label="${escapeHtml(t('buyerOriginTitle'))}">
+        ${isHoreca?'':`<div class="buyer-geo-modes" role="group" aria-label="${escapeHtml(t('buyerOriginTitle'))}">
           <button type="button" data-buyer-geo-mode="flags" aria-pressed="${buyerGeoMode==='flags'}" class="${buyerGeoMode==='flags'?'active':''}">🏳️ ${escapeHtml(t('buyerFlags'))}</button>
           <button type="button" data-buyer-geo-mode="mixed" aria-pressed="${buyerGeoMode==='mixed'}" class="${buyerGeoMode==='mixed'?'active':''}">🌍 ${escapeHtml(t('buyerMapFlags'))}</button>
-        </div>
+        </div>`}
       </div>
       <input id="buyer-country-search" type="search" placeholder="🔎 ${escapeHtml(t('buyerCountrySearch'))}" aria-label="${escapeHtml(t('buyerCountrySearch'))}">
-      ${buyerGeoMode==='mixed' ? buyerMapMarkup(origins) : ''}
+      ${buyerGeoMode==='mixed'&&!isHoreca ? buyerMapMarkup(origins) : ''}
       <h3>${escapeHtml(t('buyerCountries'))}</h3>
       ${countryCards ? `<div class="buyer-country-grid" id="buyer-country-grid">${countryCards}</div>` : `<p class="notice" role="status">${escapeHtml(t('buyerNoOrigins'))}</p>`}
     </section>
@@ -1089,7 +1109,7 @@ function buyerWorkspace() {
     </aside>
     <section class="buyer-main">
       <div class="buyer-toptools">
-        <span>${escapeHtml(t(current?.membership.role || 'importer'))}</span>
+        ${workspaceIdentityMarkup()}
         <p id="message" role="status"></p>
         <div>
           <button type="button" data-buyer-view="orders">📦 ${escapeHtml(t('buyerOrders'))}</button>
@@ -1410,7 +1430,7 @@ function updateAdminStats() {
 function adminWorkspace() {
   const view = adminViews.find(([id]) => id === activeAdminView) || adminViews[0];
   return `<section class="card workspace-card">
-      <p class="eyebrow">Fruidges</p><h1>${escapeHtml(t(current.membership.role))}</h1>
+      <p class="eyebrow">Fruidges</p><h1>${escapeHtml(t(current.membership.role))}</h1>${workspaceIdentityMarkup()}
       <p>${escapeHtml(t('ready'))}</p><p id="message" role="status"></p>
       <div class="actions">
         <button id="refresh">${escapeHtml(t('refresh'))}</button>
@@ -1461,7 +1481,7 @@ function show(message = '') {
     ? current.membership.role === 'admin' ? adminWorkspace()
     : hasPurchaseWorkspace() ? buyerWorkspace()
     : `<section class="card workspace-card">
-        <p class="eyebrow">Fruidges</p><h1>${escapeHtml(t(current.membership.role))}</h1>
+        <p class="eyebrow">Fruidges</p><h1>${escapeHtml(t(current.membership.role))}</h1>${workspaceIdentityMarkup()}
         <p>${escapeHtml(t('ready'))}</p><p id="message" role="status"></p>
         <div class="actions">
           <button id="refresh">${escapeHtml(t('refresh'))}</button>

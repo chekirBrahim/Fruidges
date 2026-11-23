@@ -6,7 +6,7 @@ import { formatMoney, formatPricePerKg } from '../src/catalog-format.js';
 
 const source = (await readFile(new URL('../src/auth-live.js', import.meta.url), 'utf8'))
   .replace(/^import .*;\r?\n/gm, '');
-const account = {user:{id:'user-a'},membership:{role:'admin',organization_id:'org-a',status:'active'}};
+const account = {user:{id:'user-a',user_metadata:{full_name:'Admin Operator'}},membership:{role:'admin',organization_id:'org-a',status:'active'}};
 let finishLink;
 const directoryRoleCounts = (role,assignedRole) => {
   const total = role === assignedRole ? 1 : 0;
@@ -161,9 +161,9 @@ assert.equal(JSON.stringify(productUpdates[0]),JSON.stringify({
 }));
 assert.equal(run('products[0].status'),'published');
 
-const buyer={user:{id:'buyer-a'},membership:{role:'importer',organization_id:'org-a',status:'active'}};
+const buyer={user:{id:'buyer-a',user_metadata:{full_name:'Buyer Agent',role:'admin'}},membership:{role:'importer',organization_id:'org-a',status:'active'}};
 context.buyer=buyer;
-const horeca={user:{id:'horeca-a'},membership:{role:'horeca',organization_id:'horeca-org',status:'active'}};
+const horeca={user:{id:'horeca-a',user_metadata:{name:'HORECA Manager'}},membership:{role:'horeca',organization_id:'horeca-org',status:'active'}};
 context.horeca=horeca;
 run("current=buyer; buyerView='resale'; products=[draft]; productsLoaded=true; show();");
 assert.doesNotMatch(node('root').innerHTML,/data-publish="draft-a"/);
@@ -195,6 +195,9 @@ context.otherOriginOffer=otherOriginOffer;
 context.horecaOffer=horecaOffer;
 run("current=buyer;buyerView='explore';buyerOrigin='';buyerQuantity={};products=[liveOffer,otherOriginOffer,resaleDraft];productsLoaded=true;productsError='';show();");
 assert.match(node('root').innerHTML,/class="buyer-layout"/);
+assert.match(node('root').innerHTML,/Buyer Agent/,'buyer workspace displays the Auth profile name');
+assert.match(node('root').innerHTML,/Importer \/ Wholesaler/,'buyer workspace displays its server-verified role');
+assert.doesNotMatch(node('root').innerHTML,/Administrator<\/strong>/,'user metadata cannot override the membership role');
 assert.match(node('root').innerHTML,/data-buyer-view="explore"/);
 assert.match(node('root').innerHTML,/Explore product origins/);
 assert.match(node('root').innerHTML,/data-buyer-origin="TN"/);
@@ -290,9 +293,11 @@ assert.equal(run("t('buyerOrderStatusInProgress')"),'قيد التنفيذ — �
 assert.equal(context.document.documentElement.dir,'rtl');
 assert.match(node('root').innerHTML,/قيد التنفيذ — بانتظار تأكيد البائع/);
 
-run("current={user:{id:'seller-a'},membership:{role:'supplier',organization_id:'supplier-org',status:'active'}};language='en';purchaseOrders=[persistedOrder];ordersLoaded=true;ordersLoading=false;ordersError='';show();");
+run("current={user:{id:'seller-a',email:'seller@example.test'},membership:{role:'supplier',organization_id:'supplier-org',status:'active'}};language='en';purchaseOrders=[persistedOrder];ordersLoaded=true;ordersLoading=false;ordersError='';show();");
 assert.match(node('root').innerHTML,/data-order-action="accept"/,'the seller can accept its incoming order');
 assert.match(node('root').innerHTML,/data-order-action="reject"/,'the seller can decline its incoming order');
+assert.match(node('root').innerHTML,/Supplier/,'supplier workspace displays its membership role');
+assert.match(node('root').innerHTML,/seller@example\.test/,'email is used only when the Auth profile has no display name');
 run("current=account;activeAdminView='orders';purchaseOrders=[persistedOrder];ordersLoaded=true;ordersLoading=false;ordersError='';show();");
 assert.match(node('root').innerHTML,/ORD-ABC123/,'the administrator sees the order');
 assert.doesNotMatch(node('root').innerHTML,/data-order-action=/,'the administrator cannot change order status in this workflow');
@@ -301,6 +306,10 @@ run("current=horeca;language='en';buyerView='explore';buyerOrigin='';buyerQuanti
 assert.match(node('root').innerHTML,/class="buyer-layout"/);
 assert.match(node('root').innerHTML,/HORECA/);
 assert.match(node('root').innerHTML,/HORECA live produce/);
+assert.match(node('root').innerHTML,/HORECA Manager/);
+assert.doesNotMatch(node('root').innerHTML,/id="buyer-map"|buyer-map-status|data-buyer-geo-mode=/,
+  'HORECA has no map or map-mode controls');
+assert.match(node('root').innerHTML,/data-buyer-origin="TN"/,'HORECA retains country flags and country navigation');
 assert.deepEqual(JSON.parse(JSON.stringify(run("buyerOffers().map(product=>product.id)"))),['live-horeca'],
   'HORECA sees only published offers addressed to its role');
 assert.doesNotMatch(node('root').innerHTML,/data-buyer-view="resale"|My sales offers|data-product-form-toggle|id="product-form"|data-publish=/,
@@ -317,6 +326,7 @@ run("language='ar';buyerView='explore';show();");
 assert.equal(context.document.documentElement.lang,'ar');
 assert.equal(context.document.documentElement.dir,'rtl');
 assert.match(node('root').innerHTML,/الفنادق والمطاعم والمقاهي/);
+assert.doesNotMatch(node('root').innerHTML,/id="buyer-map"|data-buyer-geo-mode=/);
 assert.doesNotMatch(node('root').innerHTML,/data-buyer-view="resale"|إضافة منتج|data-publish=/);
 
 nextProductUpdate={data:null,error:{code:'42501'}};
@@ -333,6 +343,8 @@ const adminProducts=[
 context.adminProducts=adminProducts;
 run("current=account; busy=false; products=adminProducts; productsLoading=false; productsLoaded=true; productsError=''; activeAdminView='overview'; language='en'; show();");
 assert.match(node('root').innerHTML,/data-admin-view="overview"/);
+assert.match(node('root').innerHTML,/Admin Operator/,'administrator workspace displays the Auth profile name');
+assert.match(node('root').innerHTML,/Administrator/,'administrator workspace displays its membership role');
 assert.match(node('root').innerHTML,/id="admin-total-products" aria-live="polite">3/);
 assert.doesNotMatch(node('root').innerHTML,/id="create-user"/);
 run("productsError='catalogError'; show();");

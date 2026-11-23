@@ -175,6 +175,7 @@ await as(6);assert(!(await skus()).includes('source'));
 
 await db.exec('reset role');
 await db.exec(await readFile(new URL('../supabase/14-order-workflow.sql',import.meta.url),'utf8'));
+await db.exec(await readFile(new URL('../supabase/15-order-reservation-overlap-fix.sql',import.meta.url),'utf8'));
 await as(1);
 await db.query(`insert into public.fruidges_products
  (organization_id,sku,name_en,name_ar,origin_country,packaging,net_weight_kg,stock_cartons,price_per_carton,currency,price_term,price_destination,status,sales_channel)
@@ -271,7 +272,20 @@ assert.equal((await db.query("select stock_cartons from public.fruidges_products
 assert.equal((await db.query('select id from public.fruidges_orders')).rows.length,3,
   'a failed checkout leaves no partial order headers');
 
+const oneSourceCart=JSON.stringify([{product_id:sourceOrderProduct,cartons:1}]);
+const firstPending=(await db.query(createOrders,[id(4),'importer',oneSourceCart,id(104)])).rows[0].orders[0];
+const secondPending=(await db.query(createOrders,[id(4),'importer',oneSourceCart,id(105)])).rows[0].orders[0];
+assert(firstPending&&secondPending,'a second checkout can reserve the same product while an earlier order is pending');
+assert.equal((await db.query("select stock_cartons from public.fruidges_products where sku='order-source'")).rows[0].stock_cartons,3,
+  'each pending order reserves one carton');
+await db.query('select public.fruidges_respond_to_order($1,$2)',[firstPending.id,'cancel']);
+assert.equal((await db.query("select stock_cartons from public.fruidges_products where sku='order-source'")).rows[0].stock_cartons,4,
+  'cancelling one order restores its stock even while another order remains pending');
+await db.query('select public.fruidges_respond_to_order($1,$2)',[secondPending.id,'cancel']);
+assert.equal((await db.query("select stock_cartons from public.fruidges_products where sku='order-source'")).rows[0].stock_cartons,5,
+  'cancelling the remaining order restores its reservation exactly once');
+
 console.log('PASS: five-role migration, three-stage audience routing, admin multi-audience override/reset and seller denial.');
-console.log('PASS: seller-split orders, idempotency, reservation/release and stock protection, participant-only RLS and atomic rollback.');
+console.log('PASS: seller-split orders, repeat reservations, idempotency, stock release/protection, participant-only RLS and atomic rollback.');
 console.log('PASS: four-role migration, buyer resale ownership/publication, source and restaurant visibility, Storage isolation, cross-company denial, suspension, service-only provisioning and admin country updates.');
 } finally {await db.close();}
