@@ -1,4 +1,4 @@
--- PREPARED, NOT APPLIED. Apply only after reviewing 13-market-roles-and-visibility.sql.
+-- Migration 14 definition. Apply only once, after reviewing 13-market-roles-and-visibility.sql.
 -- One order is created per seller. Stock is reserved by reducing available cartons.
 begin;
 
@@ -277,6 +277,7 @@ begin
       where i.order_id=v_order.id and p.stock_cartons>2147483647-i.cartons
     ) then raise exception 'stock_restore_overflow'; end if;
     update public.fruidges_orders set status=v_status,updated_at=now() where id=v_order.id;
+    perform set_config('fruidges.order_stock_release','on',true);
     for v_item in select product_id,cartons from public.fruidges_order_items
       where order_id=v_order.id and product_id is not null order by product_id
     loop
@@ -284,6 +285,7 @@ begin
         set stock_cartons=stock_cartons+v_item.cartons
         where id=v_item.product_id;
     end loop;
+    perform set_config('fruidges.order_stock_release','off',true);
     return;
   end if;
 
@@ -306,13 +308,13 @@ begin
     ) then raise exception 'product_has_pending_order'; end if;
     return old;
   end if;
-  if exists (
-    select 1 from public.fruidges_order_items i
-    join public.fruidges_orders o on o.id=i.order_id
-    where i.product_id=old.id and o.status='in_progress'
-  ) and new.stock_cartons is distinct from old.stock_cartons then
-    raise exception 'product_has_pending_order';
-  end if;
+  if new.stock_cartons>old.stock_cartons
+    and current_setting('fruidges.order_stock_release',true) is distinct from 'on'
+    and exists (
+      select 1 from public.fruidges_order_items i
+      join public.fruidges_orders o on o.id=i.order_id
+      where i.product_id=old.id and o.status='in_progress'
+    ) then raise exception 'product_has_pending_order'; end if;
   return new;
 end
 $$;
